@@ -107,7 +107,7 @@
 
   ```bash
   # Clone                                                                                                                                                                                      
-  git clone https://github.com/MoshMish/openlibrary-e2e-playwright.git
+  git clone https://github.com/moshemishel/openlibrary-e2e-playwright.git 
   cd openlibrary-e2e-playwright
 
   # Virtual environment
