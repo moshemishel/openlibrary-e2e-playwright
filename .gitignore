@@ -1,10 +1,14 @@
-  # Python (universal)
-  __pycache__/                                                                                                                                                                                  
-  *.py[cod]
-  *.egg-info/                                                                                                                                                                                   
-  
-  # Virtual Environment
-  .venv/
+# Python (universal)
+__pycache__/                                                                                                                                                                                  
+*.py[cod]
+*.egg-info                                                                                                                                                                                  
 
-  # macOS                                                                                                                                                          
-  .DS_Store
+# Virtual Environment
+.venv/
+
+# macOS                                                                                                                                                          
+.DS_Store
+
+# Test caches
+.pytest_cache/                                                                                                                                                                               
+.ruff_cache/
