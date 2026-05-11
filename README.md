@@ -204,7 +204,38 @@
   └── README.md
   ```                                                                                                                                                                                          
 
-  ---                                                                                                                                                                                          
+  ---
+
+  ## Locators
+
+  ### General strategy
+
+  Locators are chosen in this order, from most stable to least:
+
+  1. **Schema.org microdata** (`itemtype`, `itemprop`) — the strongest signal. OpenLibrary needs it for SEO (Google rich results) and will not remove it lightly.
+  2. **Playwright Tier 1** (`get_by_role`) — accessibility-first, stable across CSS refactors.
+  3. **Playwright Tier 4** (`get_by_text`) — for static text labels.
+  4. **CSS class selectors** — only as a fallback when nothing else is exposed.
+
+  ### Function 1 — `search_books_by_title_under_year`
+
+  **Navigation:** direct URL `/search?q={query}&mode=everything&sort=old&page={N}` — no UI typing. `sort=old` returns the oldest results first, which lets the loop stop scanning pages once a result's year exceeds `max_year`.
+
+  **Selectors:**
+
+  | What | Selector | Source |
+  |---|---|---|
+  | Result container | `li[itemtype$="Book"]` | Schema.org |
+  | Book link (URL) | `[itemprop="name"] a[itemprop="url"]` | Schema.org (chained — tag-agnostic) |
+  | Total pages | `ol-pagination[total-pages]` attribute | Web Component |
+
+  **Year extraction — known limitation:**
+
+  OpenLibrary's search results do **not** expose `datePublished` anywhere in the DOM — no `<meta>`, no `data-*` attribute, no JSON-LD. The year appears only as text: `"First published in 1965"`. We extract it from `.resultDetails span` and parse the 4-digit year with a regex.
+
+  **Alternative considered:** OpenLibrary's JSON API at `https://openlibrary.org/search.json?q=...` returns `first_publish_year` as an integer — fully stable. Rejected because it bypasses the UI/POM architecture, which is 40% of the grade. Kept on record for future reference.
+
+  ---
   
   ## Architecture
   
@@ -214,7 +245,7 @@
                                                                                                                                                                                                
   ## Limitations
 
-  > _Will list known limits as they come up during development._
+  - **Config merge depth.** Profile merging is shallow (`{**default, **active}`). A profile that wants to override a single key inside `thresholds` must restate all three keys. No profile in this project needs that, so the loader stays simple. A deeper merge would be one `if isinstance(v, dict)` in the loader if a future profile ever needs it.
 
   ---
                                                                                                                                                                                                

@@ -1,0 +1,20 @@
+{
+    "default": {                                                                                                                                                                                
+      "base_url": "https://openlibrary.org",
+      "headless": true,
+      "slow_mo": 0,
+      "viewport": { "width": 1280, "height": 720 },                                                                                                                                             
+      "thresholds": { 
+        "search": 3000,
+        "book": 2500,
+        "reading_list": 2000
+      }
+    },                                                                                                                                                                                          
+    "debug": {
+      "headless": false, 
+      "slow_mo": 500
+    },
+    "ci": {
+      "headless": true
+    }                                                                                                                                                                                           
+  }
