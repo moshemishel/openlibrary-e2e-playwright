@@ -139,13 +139,53 @@
 
   ---
 
+  ## Configuration & Profiles
+
+  All runtime settings live in `config/config.json`. The file holds named profile blocks:
+
+  ```json
+  {
+    "default": {
+      "base_url": "https://openlibrary.org",
+      "headless": true,
+      "slow_mo": 0,
+      "thresholds": { "search": 3000, "book": 2500, "reading_list": 2000 }
+    },
+    "debug": { "headless": false, "slow_mo": 500 },
+    "ci":    { "headless": true }
+  }
+  ```
+
+  **Choose a profile** with the `PROFILE` environment variable:
+
+  ```bash
+  pytest                  # uses default
+  PROFILE=debug pytest    # default merged with debug overrides
+  PROFILE=ci pytest       # default merged with ci overrides
+  ```
+
+  **Override single keys** with dedicated env vars (no `.env` file needed):
+
+  | ENV variable | Overrides | Example |
+  |---|---|---|
+  | `HEADLESS` | `headless` (boolean) | `HEADLESS=false pytest` |
+  | `SLOW_MO` | `slow_mo` (number, ms) | `SLOW_MO=500 pytest` |
+
+  The loader at `utils/config_loader.py` merges in this order:
+
+  1. The `default` block (always loaded)
+  2. The active profile (from `PROFILE`, falls back to `default`)
+  3. Per-key env overrides (highest priority)
+
+  ---
+
   ## Project Structure
 
   ```
   openlibrary-e2e-playwright/
   ├── pages/          # POM classes
   ├── tests/          # Pytest tests
-  ├── data/           # Test input data (JSON / YAML / CSV)
+  ├── data/           # Test input data (JSON)
   ├── config/         # Configs, profiles, thresholds
   ├── utils/          # Helpers (performance, logging, files)
   ├── pyproject.toml  # Project info, dependencies, tool configs
@@ -166,6 +206,23 @@
 
   ---
                                                                                                                                                                                                
+  ## Decisions Made
+
+  These choices were made early. The reason and the trade-off are listed for transparency:
+
+  | Area | Decision | Reason | Trade-off |
+  |---|---|---|---|
+  | Async API | Use Playwright async API (`playwright.async_api`) | The four required function signatures in the spec are all `async def`. The spec's example also calls them with `await`. Choosing sync would force changing the signatures and break the contract. |
+  | Test runner | Add `pytest` as the test runner | The spec does not ask for a runner. Pytest helps me with two of the grading items so far: Data-Driven (10%) — `parametrize` reads test cases from a JSON file; Robustness (30%) — fixtures keep each test clean from the others. The reporting choice is still open, but pytest leaves the option open for native JUnit XML, HTML, or Allure when I decide. The four required functions stay simple, and pytest only calls them from `tests/`. | Adds a dependency the spec did not ask for. |
+  | Async fixture setup | Raw `async_playwright` in `conftest.py` (not the `pytest-playwright` plugin) | The official `pytest-playwright` plugin is sync-only. Our signatures need async, so a small custom `conftest.py` with async fixtures matches the contract and gives full control. | I write the fixture code myself, about 15 lines. The official plugin includes some extras like auto-screenshots on fail and a `--browser firefox` CLI flag. I will add these only if I need them. |
+  | Configuration storage | Single JSON file at `config/config.json` | One source of truth. Booleans and numbers keep their real types (no string parsing for the primary config). |
+  | Profiles | Profile blocks (`default`, `debug`, `ci`) inside the same JSON file | All profiles are visible in one view. The active profile is chosen via the `PROFILE` env var. Merging happens at load time: `{**default, **active}`. | A reviewer scanning only the folder tree may not see the profiles at first — the README points them in. |
+  | Runtime overrides | Environment variables passed in the command (no `.env` file) | No secrets in this project, so a `.env` file is not needed. Avoids the `python-dotenv` dependency and keeps `pytest` working out of the box. | If many overrides are needed at once, the command line gets long — easy to add a `.env` later. |
+  | Test data format | JSON files in `data/` (e.g., `data/search_cases.json`) | Already a dependency. Consistent with the config format. Each test case includes a `description` field used for readable IDs in pytest's report. Plays well with `@pytest.mark.parametrize`. | JSON has no comments — the `description` field replaces them. |
+  | Test file split | Split by function: `test_search.py`, `test_reading_list.py`, `test_performance.py`, plus `test_e2e_flow.py` for the full integration scenario | Each file groups tests for one of the four required functions. The e2e flow file runs all four in sequence, matching the spec's "tear e2e flow" language. | More files. Clear file names keep them easy to find. |
+
+  ---
+
   ## Open Decisions
 
   These decisions are still open. They will be made when needed during the work. Listed here to be open about what is not yet decided:
@@ -173,11 +230,6 @@
   | Area | Pending decision |
   |---|---|                                                                                                                                                                                    
   | Reporting tool | Playwright HTML built-in vs Allure (added later if time) |
-  | Async setup | Use `pytest-playwright` (gives a `page` fixture) or use raw `async_playwright` in `conftest.py` |
-  | Data format | JSON vs YAML vs CSV for test inputs |
-  | Configuration | Where `BASE_URL`, `HEADLESS`, and thresholds will live (env vs config files) |
-  | Profiles | How to load different settings (URL, headless, slow_mo, etc.) for different run modes — for example, `debug` vs `fast` on local, or `local` vs `ci`. |
-  | Test file split | One `test_e2e_flow.py` vs separate files (search / reading list / performance) |
   | CI/CD | Optional extra. May add a GitHub Actions workflow. |
 
   ---
