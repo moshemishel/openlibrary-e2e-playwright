@@ -164,18 +164,30 @@
   PROFILE=ci pytest       # default merged with ci overrides
   ```
 
-  **Override single keys** with dedicated env vars (no `.env` file needed):
+  **Stable values** (login credentials, default profile) live in a `.env` file. Copy `.env.example` to `.env` and fill it in:
+
+  ```bash
+  cp .env.example .env
+  # then edit .env with your OpenLibrary account credentials
+  ```
+
+  The `.env` file is loaded automatically when `pytest` starts. It is listed in `.gitignore` and is never committed.
+
+  **Per-run overrides** are env vars passed on the command line. They beat `.env`:
 
   | ENV variable | Overrides | Example |
   |---|---|---|
+  | `PROFILE` | active profile block | `PROFILE=debug pytest` |
   | `HEADLESS` | `headless` (boolean) | `HEADLESS=false pytest` |
   | `SLOW_MO` | `slow_mo` (number, ms) | `SLOW_MO=500 pytest` |
+  | `OL_USERNAME` | OpenLibrary login email | `OL_USERNAME=... pytest` |
+  | `OL_PASSWORD` | OpenLibrary login password | `OL_PASSWORD=... pytest` |
 
   The loader at `utils/config_loader.py` merges in this order:
 
   1. The `default` block (always loaded)
   2. The active profile (from `PROFILE`, falls back to `default`)
-  3. Per-key env overrides (highest priority)
+  3. Per-key env overrides (`.env` values and CLI values — CLI wins on conflict)
 
   ---
 
@@ -217,9 +229,12 @@
   | Async fixture setup | Raw `async_playwright` in `conftest.py` (not the `pytest-playwright` plugin) | The official `pytest-playwright` plugin is sync-only. Our signatures need async, so a small custom `conftest.py` with async fixtures matches the contract and gives full control. | I write the fixture code myself, about 15 lines. The official plugin includes some extras like auto-screenshots on fail and a `--browser firefox` CLI flag. I will add these only if I need them. |
   | Configuration storage | Single JSON file at `config/config.json` | One source of truth. Booleans and numbers keep their real types (no string parsing for the primary config). |
   | Profiles | Profile blocks (`default`, `debug`, `ci`) inside the same JSON file | All profiles are visible in one view. The active profile is chosen via the `PROFILE` env var. Merging happens at load time: `{**default, **active}`. | A reviewer scanning only the folder tree may not see the profiles at first — the README points them in. |
-  | Runtime overrides | Environment variables passed in the command (no `.env` file) | No secrets in this project, so a `.env` file is not needed. Avoids the `python-dotenv` dependency and keeps `pytest` working out of the box. | If many overrides are needed at once, the command line gets long — easy to add a `.env` later. |
+  | Runtime overrides | `.env` file for stable values + CLI environment variables for per-run overrides. CLI takes priority. | The reading list functions need a logged-in account, so credentials must live outside git. Stable values like credentials and a default profile go in `.env` so they are not typed every time. CLI env vars (e.g. `PROFILE=debug pytest`) override `.env` for one-off changes, because `python-dotenv` does not replace env vars that are already set. | Adds one dependency: `python-dotenv`. |
   | Test data format | JSON files in `data/` (e.g., `data/search_cases.json`) | Already a dependency. Consistent with the config format. Each test case includes a `description` field used for readable IDs in pytest's report. Plays well with `@pytest.mark.parametrize`. | JSON has no comments — the `description` field replaces them. |
-  | Test file split | Split by function: `test_search.py`, `test_reading_list.py`, `test_performance.py`, plus `test_e2e_flow.py` for the full integration scenario | Each file groups tests for one of the four required functions. The e2e flow file runs all four in sequence, matching the spec's "tear e2e flow" language. | More files. Clear file names keep them easy to find. |
+  | Test file split | Split by function: `test_search.py`, `test_reading_list.py`, `test_performance.py`, plus `test_e2e_flow.py` for the full integration scenario | Each file groups tests for one of the four required functions. The e2e flow file runs all four in sequence as a single end-to-end scenario. | More files. Clear file names keep them easy to find. |
+  | Function placement | Functions 1–3 are methods on POM classes. Function 4 is a module-level utility in `utils/performance.py`. | The function signatures lead the design. Functions 1–3 do not receive `page` as a parameter, so they need stored state — a class fits well. Function 4 does receive `page`, so it does not need state — a module-level function fits well. This keeps page actions in `pages/` and shared helpers in `utils/`. | None. The split follows directly from the spec's signatures. |
+  | Authentication strategy | Log in once per session, capture Playwright's `storage_state` in memory, then inject it into a fresh browser context for every test that needs login | Each test gets a clean browser context, but already signed in. Tests do not share DOM or cookies, so they stay independent and the order they run in does not matter. This is the pattern recommended by [Playwright's own auth docs](https://playwright.dev/python/docs/auth#reusing-signed-in-state). Two fixtures are exposed: `page` is pre-authenticated; `anonymous_page` is a clean context for tests that do not need login (search, performance). The login UI runs only once per `pytest` run. If login fails (network or bad credentials), the affected tests are skipped with `pytest.skip` instead of crashing. | Login itself is required by OpenLibrary for the reading list pages, not by our framework — credentials are supplied via `.env` (template at `.env.example`). If OpenLibrary changes its login page, the session fixture fails once at the start of the run, instead of every test failing on its own. |
+  | Performance report aggregation | Collect every result in memory during the run, then write `performance_report.json` once at the end (via a `pytest_sessionfinish` hook in `conftest.py`) | The spec asks for one JSON file with all results. Collecting in memory and writing once is simpler than writing on every call: a single disk write, no risk of two tests writing at the same time, and no extra I/O while tests are running. | If `pytest` crashes before the end, the file is not written. Acceptable — a partial report is not necessarily more useful than no file. |
 
   ---
 

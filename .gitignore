@@ -12,3 +12,6 @@ __pycache__/
 # Test caches
 .pytest_cache/
 .ruff_cache/
+
+# Local environment (secrets, credentials)
+.env
