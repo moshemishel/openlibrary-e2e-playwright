@@ -213,9 +213,27 @@
   Locators are chosen in this order, from most stable to least:
 
   1. **Schema.org microdata** (`itemtype`, `itemprop`) — the strongest signal. OpenLibrary needs it for SEO (Google rich results) and will not remove it lightly.
-  2. **Playwright Tier 1** (`get_by_role`) — accessibility-first, stable across CSS refactors.
+  2. **Playwright Tier 1** (`get_by_role`, `get_by_label`) — accessibility-first, stable across CSS refactors.
   3. **Playwright Tier 4** (`get_by_text`) — for static text labels.
   4. **CSS class selectors** — only as a fallback when nothing else is exposed.
+
+  ### Authentication — `LoginPage`
+
+  Used once per pytest session by the `auth_storage_state` fixture.
+
+  | What | Selector | Source |
+  |---|---|---|
+  | Form container (scoping) | `form.login` | CSS class |
+  | Email input | `get_by_label("Email")` | Linked `<label for>` (Tier 1) |
+  | Password input | `get_by_label("Password")` | Linked `<label for>` (Tier 1) |
+  | Submit | `get_by_role("button", name="Log In")` | Accessible name (Tier 1) |
+  | Error message | `div.error.ol-signup-form__info-box` | CSS class (no role available) |
+
+  **Success indicator:** URL navigates away from `/account/login`. The form's hidden `redirect` field points to `/`, so the post-login URL is the base URL.
+
+  **Failure indicator:** URL stays on `/account/login` AND the error box becomes visible. The text differs by reason (`Wrong password.`, `No account was found with this email.`) and is passed into `pytest.skip(...)` so the test report shows the actual cause.
+
+  **Session artifact:** a single cookie named `session` on `openlibrary.org`. Playwright's `storage_state()` captures it automatically; `auth_storage_state` keeps it in memory only — never written to disk.
 
   ### Function 1 — `search_books_by_title_under_year`
 
@@ -266,6 +284,7 @@
   | Function placement | Functions 1–3 are methods on POM classes. Function 4 is a module-level utility in `utils/performance.py`. | The function signatures lead the design. Functions 1–3 do not receive `page` as a parameter, so they need stored state — a class fits well. Function 4 does receive `page`, so it does not need state — a module-level function fits well. This keeps page actions in `pages/` and shared helpers in `utils/`. | None. The split follows directly from the spec's signatures. |
   | Authentication strategy | Log in once per session, capture Playwright's `storage_state` in memory, then inject it into a fresh browser context for every test that needs login | Each test gets a clean browser context, but already signed in. Tests do not share DOM or cookies, so they stay independent and the order they run in does not matter. This is the pattern recommended by [Playwright's own auth docs](https://playwright.dev/python/docs/auth#reusing-signed-in-state). Two fixtures are exposed: `page` is pre-authenticated; `anonymous_page` is a clean context for tests that do not need login (search, performance). The login UI runs only once per `pytest` run. If login fails (network or bad credentials), the affected tests are skipped with `pytest.skip` instead of crashing. | Login itself is required by OpenLibrary for the reading list pages, not by our framework — credentials are supplied via `.env` (template at `.env.example`). If OpenLibrary changes its login page, the session fixture fails once at the start of the run, instead of every test failing on its own. |
   | Performance report aggregation | Collect every result in memory during the run, then write `performance_report.json` once at the end (via a `pytest_sessionfinish` hook in `conftest.py`) | The spec asks for one JSON file with all results. Collecting in memory and writing once is simpler than writing on every call: a single disk write, no risk of two tests writing at the same time, and no extra I/O while tests are running. | If `pytest` crashes before the end, the file is not written. Acceptable — a partial report is not necessarily more useful than no file. |
+  | `pytest-asyncio` loop scope | Both `asyncio_default_fixture_loop_scope` and `asyncio_default_test_loop_scope` are set to `"session"` in `pyproject.toml` | Playwright objects (`Page`, `BrowserContext`) are bound to the event loop on which they were created. With the default mix (session loop for fixtures, function loop for tests), a page created in a session-scoped fixture and used inside a test hangs forever -- the awaitable is registered on the wrong loop's queue and never resolves, with no error. Forcing both scopes to `"session"` keeps the whole run on one loop. | All tests share one event loop, so test order can matter slightly more (a misused session-scoped fixture could leak state across tests). Mitigation: every test gets a fresh `BrowserContext`, so DOM and cookies do not leak. |
 
   ---
 
