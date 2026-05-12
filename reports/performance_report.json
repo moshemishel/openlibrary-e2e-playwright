@@ -1,0 +1,98 @@
+{
+  "runs": [
+    {
+      "url": "https://openlibrary.org/account/books",
+      "threshold_ms": 2000,
+      "timestamp": "2026-05-12T11:00:57.351694+00:00",
+      "breached": false,
+      "load_time_ms": 1907,
+      "dom_content_loaded_ms": 1686,
+      "first_paint_ms": 1692
+    },
+    {
+      "url": "https://openlibrary.org",
+      "threshold_ms": 60000,
+      "timestamp": "2026-05-12T11:01:00.340877+00:00",
+      "breached": false,
+      "load_time_ms": 2915,
+      "dom_content_loaded_ms": 1963,
+      "first_paint_ms": 1168
+    },
+    {
+      "url": "https://openlibrary.org/account/books",
+      "threshold_ms": 60000,
+      "timestamp": "2026-05-12T11:01:03.879788+00:00",
+      "breached": false,
+      "load_time_ms": 3459,
+      "dom_content_loaded_ms": 2761,
+      "first_paint_ms": 2244
+    },
+    {
+      "url": "https://openlibrary.org",
+      "threshold_ms": 1,
+      "timestamp": "2026-05-12T11:01:06.370979+00:00",
+      "breached": true,
+      "load_time_ms": 2444,
+      "dom_content_loaded_ms": 1690,
+      "first_paint_ms": 1064
+    },
+    {
+      "url": "https://openlibrary.org/account/books",
+      "threshold_ms": 1,
+      "timestamp": "2026-05-12T11:01:10.531036+00:00",
+      "breached": true,
+      "load_time_ms": 4080,
+      "dom_content_loaded_ms": 3342,
+      "first_paint_ms": 2876
+    },
+    {
+      "url": "https://openlibrary.org",
+      "threshold_ms": 60000,
+      "timestamp": "2026-05-12T11:01:13.320200+00:00",
+      "breached": false,
+      "load_time_ms": 2744,
+      "dom_content_loaded_ms": 1955,
+      "first_paint_ms": 1308
+    },
+    {
+      "url": "https://openlibrary.org/account/books",
+      "threshold_ms": 60000,
+      "timestamp": "2026-05-12T11:01:16.904024+00:00",
+      "breached": false,
+      "load_time_ms": 3498,
+      "dom_content_loaded_ms": 2765,
+      "first_paint_ms": 2276
+    },
+    {
+      "url": "https://openlibrary.org/",
+      "threshold_ms": 5000,
+      "timestamp": "2026-05-12T11:01:19.385133+00:00",
+      "breached": false,
+      "load_time_ms": 2435,
+      "dom_content_loaded_ms": 1719,
+      "first_paint_ms": 1080
+    },
+    {
+      "url": "https://openlibrary.org/search?q=python",
+      "threshold_ms": 5000,
+      "timestamp": "2026-05-12T11:01:28.344095+00:00",
+      "breached": true,
+      "load_time_ms": 8907,
+      "dom_content_loaded_ms": 3285,
+      "first_paint_ms": 2612
+    },
+    {
+      "url": "https://openlibrary.org/works/OL893415W/Dune",
+      "threshold_ms": 5000,
+      "timestamp": "2026-05-12T11:01:34.420584+00:00",
+      "breached": true,
+      "load_time_ms": 6012,
+      "dom_content_loaded_ms": 4247,
+      "first_paint_ms": 2808
+    }
+  ],
+  "summary": {
+    "total": 10,
+    "breached": 4
+  }
+}
