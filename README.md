@@ -288,6 +288,43 @@
 
   The class names `primary-action` and `read-statuses` are *semantic* — they describe what the area is, not how it looks. They are less likely to be renamed in a redesign than visual classes (e.g. `.btn-blue-large`). There is no Tier 1 way to say "the form that is the primary action" because forms have no accessible role or name. In this case, a stable CSS class is the cleanest available choice.
 
+  ### Function 3 — `assert_reading_list_count` (ReadingListPage)
+
+  **Navigation:** one page load to `/account/books`. OpenLibrary redirects this to `/people/<username>/books`, so we do not need to know the username in advance — it works for whichever user is logged in.
+
+  **What we count:** the sum of three "status shelves" on the landing page: **Currently Reading + Want to Read + Already Read**. Loans (active library loans from Internet Archive) and Lists (user-curated lists) are deliberately *not* counted — they are not reading-list shelves. This matches the random behaviour of function 2, which adds each book to WTR or AR at random; counting only one shelf would fail whenever a book happened to land on the other.
+
+  **Selectors:**
+
+  | What | Selector | Source |
+  |---|---|---|
+  | Currently Reading heading | `get_by_role("heading", name=re.compile(r"^Currently Reading(?:$\| \()"))` | Accessible name (Tier 1) |
+  | Want to Read heading | `get_by_role("heading", name=re.compile(r"^Want to Read(?:$\| \()"))` | Accessible name (Tier 1) |
+  | Already Read heading | `get_by_role("heading", name=re.compile(r"^Already Read(?:$\| \()"))` | Accessible name (Tier 1) |
+
+  **State signal:** the count is part of the heading text. We read `inner_text` of the heading and run a single regex `\((\d+)\)` to extract the number. If the regex finds no match, the count is `0`.
+
+  **Why heading-role beats every alternative:**
+
+  Each shelf on the landing page is shown in two places at once: the desktop carousel section (inside an `<h2>`) and the mobile sidebar (inside a `<div>`, no heading). `get_by_role("heading", ...)` matches the desktop version only, because the mobile copy is not a heading. That gives us exactly one element per shelf, no strict-mode collision, no class-scoped fallback, no reliance on hidden-on-desktop mobile DOM.
+
+  Compare this with two alternatives that look attractive but fail:
+
+  - `get_by_role("link", name=re.compile(r"^Want to Read"))` — collides because both copies (desktop *and* mobile) are `<a>` links. Strict-mode error.
+  - `.mybooks-menu-mobile a[name="want-to-read"]` — works, but only because we hard-scope to the mobile sidebar. It reads from a region that is `display: none` on desktop. Less robust if OpenLibrary ever stops rendering the mobile sidebar on wide viewports.
+
+  **Why the regex is `^Label(?:$| \()` and not just `^Label`:**
+
+  The shelf heading text is `Label (N)` when the shelf has items, or just `Label` when it is empty (this happens for Currently Reading when there are zero books — the count is not printed in that case). The regex accepts both: end-of-name, or a space followed by an opening paren. This avoids false matches on neighbours such as "Currently Reading Stats" or any future heading that shares the same prefix.
+
+  **Why count from the heading text and not from the DOM book items:**
+
+  Counting `.book.carousel__item` elements on the landing page is tempting but wrong. The carousel is JS-paginated and only renders the first 6 or so items, even when the shelf has 13. The number in the heading is server-rendered from the database and is the true total. Using it costs one page load, not three (one per shelf), and never under-counts.
+
+  **Why a missing heading maps to `0` instead of an error:**
+
+  Defensive default. If OpenLibrary ever stops rendering a shelf section that has zero items, our code logs a warning and returns `0` for that shelf, instead of raising. The total stays correct, and the warning gives us a signal to update the locator if the page layout changes.
+
   ---
   
   ## Architecture
