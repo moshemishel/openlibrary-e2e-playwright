@@ -121,7 +121,11 @@ async def page(
 # made during the run into one JSON file. Decision recorded in
 # README -> "Decisions Made" -> "Performance report aggregation".
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
-    """Dump all perf measurements to performance_report.json at the project root."""
+    """Dump all perf measurements to reports/performance_report.json.
+
+    Co-located with the pytest-html report so every artifact a CI run
+    needs to upload lives under the same `reports/` directory.
+    """
     results = get_perf_results()
     if not results:
         return
@@ -132,6 +136,8 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
             "breached": sum(1 for r in results if r["breached"]),
         },
     }
-    report_path = Path(__file__).parent / "performance_report.json"
+    reports_dir = Path(__file__).parent / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    report_path = reports_dir / "performance_report.json"
     report_path.write_text(json.dumps(report, indent=2))
     logger.info("wrote %d perf records to %s", len(results), report_path)

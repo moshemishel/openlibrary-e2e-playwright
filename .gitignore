@@ -19,8 +19,8 @@ __pycache__/
 # Screenshots from test runs
 screenshots/
 
-# Performance report (generated each run by pytest_sessionfinish)
-performance_report.json
+# Generated test artifacts (pytest-html report + perf report)
+reports/
 
 # Local copy of the test spec PDF (not part of the framework)
 test_spec.pdf
