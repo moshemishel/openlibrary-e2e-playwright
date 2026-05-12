@@ -302,7 +302,7 @@
   | Want to Read heading | `get_by_role("heading", name=re.compile(r"^Want to Read(?:$\| \()"))` | Accessible name (Tier 1) |
   | Already Read heading | `get_by_role("heading", name=re.compile(r"^Already Read(?:$\| \()"))` | Accessible name (Tier 1) |
 
-  **State signal:** the count is part of the heading text. We read `inner_text` of the heading and run a single regex `\((\d+)\)` to extract the number. If the regex finds no match, the count is `0`.
+  **State signal:** the count is part of the heading text. We read `inner_text` of the heading and run a single regex `\(([\d,]+)\)` to extract the number, then strip any thousands-separator before `int()`. If the regex finds no match, the count is `0`.
 
   **Why heading-role beats every alternative:**
 
@@ -368,6 +368,7 @@
   |---|---|                                                                                                                                                                                    
   | Reporting tool | Playwright HTML built-in vs Allure (added later if time) |
   | CI/CD | Optional extra. May add a GitHub Actions workflow. |
+  | Reading list cleanup mode | Planned: an opt-in CLI flag (e.g. `--clean-reading-list` or env var `CLEAN_READING_LIST=true`) that, when set, wipes every shelf (Currently Reading + Want to Read + Already Read) **before** the run starts and again **after** it ends. Default behaviour stays as today: no cleanup, tests rely on the idempotency of `add_to_shelf`. Rationale: the project's OL account is a throwaway used only for this exercise, so a full wipe is safe when requested, and it produces a fully deterministic starting state for data-driven and E2E runs. Implementation will be a `pytest_addoption` + a session-scoped fixture that iterates the three shelf pages and calls `remove_from_shelf` per book, gated on the flag. To be added after function 4 and the data-driven refactor are in place. |
 
   ---
 
