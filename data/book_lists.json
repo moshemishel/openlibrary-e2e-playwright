@@ -1,0 +1,10 @@
+[
+  {
+    "description": "single book added once",
+    "urls": ["/works/OL893415W"]
+  },
+  {
+    "description": "duplicate list exercises idempotent add",
+    "urls": ["/works/OL893415W", "/works/OL893415W"]
+  }
+]

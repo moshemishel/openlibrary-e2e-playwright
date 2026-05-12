@@ -1,0 +1,24 @@
+[
+  {
+    "description": "dune editions published by 1980",
+    "query": "Dune",
+    "max_year": 1980,
+    "limit": 3,
+    "expected_min_count": 1
+  },
+  {
+    "description": "no dune editions exist before year 1000",
+    "query": "Dune",
+    "max_year": 1000,
+    "limit": 5,
+    "expected_min_count": 0,
+    "expected_max_count": 0
+  },
+  {
+    "description": "harry potter editions by 2010",
+    "query": "Harry Potter",
+    "max_year": 2010,
+    "limit": 5,
+    "expected_min_count": 1
+  }
+]

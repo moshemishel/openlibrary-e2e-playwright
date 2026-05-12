@@ -7,13 +7,22 @@ for authenticated ones), but the function's contract must hold either
 way: returns a dict of the right shape, the breach flag matches the
 threshold/metrics relationship, and the function never raises on a
 slow page.
+
+`test_perf_data_driven_anonymous` adds the JSON-file-driven sweep
+required for the Data-Driven grading item. Anonymous-only -- auth is
+already exercised by the explicit tests above, and doubling every case
+would push runtime up without adding contract coverage.
 """
 
 from typing import Any
 
+import pytest
 from playwright.async_api import Page
 
+from utils.data_loader import load_data
 from utils.performance import measure_page_performance
+
+_PERF_CASES = load_data("perf_targets.json")
 
 # Two extreme thresholds let us drive the breach flag deterministically:
 #   * HIGH_THRESHOLD_MS -- generous enough that no real page breaches.
@@ -86,3 +95,23 @@ async def test_no_breach_on_high_threshold_authenticated(
         page, f"{config['base_url']}/account/books", HIGH_THRESHOLD_MS
     )
     assert record["breached"] is False
+
+
+@pytest.mark.parametrize(
+    "case",
+    _PERF_CASES,
+    ids=[c["description"] for c in _PERF_CASES],
+)
+async def test_perf_data_driven_anonymous(
+    case: dict[str, Any], anonymous_page: Page, config: dict[str, Any]
+) -> None:
+    """Cases from data/perf_targets.json.
+
+    Sweeps a list of target URLs against per-case thresholds. The shape
+    contract must hold for every target; the breach flag is whatever it
+    turns out to be (we don't pin it -- the thresholds in JSON are real
+    SLOs, not deterministic edge cases).
+    """
+    url = config["base_url"] + case["path"]
+    record = await measure_page_performance(anonymous_page, url, case["threshold_ms"])
+    _assert_record_shape(record, url, case["threshold_ms"])

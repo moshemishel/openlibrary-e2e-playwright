@@ -1,0 +1,17 @@
+[
+  {
+    "description": "homepage",
+    "path": "/",
+    "threshold_ms": 5000
+  },
+  {
+    "description": "search results page",
+    "path": "/search?q=python",
+    "threshold_ms": 5000
+  },
+  {
+    "description": "book page (dune)",
+    "path": "/works/OL893415W/Dune",
+    "threshold_ms": 5000
+  }
+]

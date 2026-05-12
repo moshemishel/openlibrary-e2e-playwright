@@ -8,6 +8,9 @@ tests rely on the idempotency of `BookPage.add_to_shelf` -- adding to
 the same shelf twice is a no-op. Function 3 tests assert the function
 contract (type, raises, idempotent read) rather than specific numbers,
 so they tolerate whatever shelf state the account is in.
+
+`test_add_books_data_driven` adds the JSON-file-driven sweep required
+for the Data-Driven grading item.
 """
 
 import random
@@ -18,9 +21,12 @@ from playwright.async_api import Page
 
 from pages.book_page import BookPage
 from pages.reading_list_page import ReadingListPage
+from utils.data_loader import load_data
 
 # Dune by Frank Herbert -- stable OpenLibrary work used as a test fixture.
 DUNE_PATH = "/works/OL893415W"
+
+_BOOK_LISTS = load_data("book_lists.json")
 
 
 async def test_add_to_shelf_idempotent(page: Page, config: dict[str, Any]) -> None:
@@ -67,3 +73,24 @@ async def test_assert_with_wrong_count_raises(page: Page, config: dict[str, Any]
     actual = await rlp.total_count()
     with pytest.raises(AssertionError):
         await rlp.assert_reading_list_count(actual + 1)
+
+
+@pytest.mark.parametrize(
+    "case",
+    _BOOK_LISTS,
+    ids=[c["description"] for c in _BOOK_LISTS],
+)
+async def test_add_books_data_driven(
+    case: dict[str, Any], page: Page, config: dict[str, Any]
+) -> None:
+    """Cases from data/book_lists.json.
+
+    After the call, every URL in the case must be on Want to Read or
+    Already Read. Seeded RNG so the random shelf choice is reproducible.
+    """
+    random.seed(42)
+    book = BookPage(page, config["base_url"])
+    await book.add_books_to_reading_list(case["urls"])
+    for url in case["urls"]:
+        await book.goto(url)
+        assert await book.current_shelf() in {"want_to_read", "already_read"}
