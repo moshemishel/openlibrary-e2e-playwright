@@ -18,3 +18,6 @@ __pycache__/
 
 # Screenshots from test runs
 screenshots/
+
+# Performance report (generated each run by pytest_sessionfinish)
+performance_report.json

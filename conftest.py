@@ -17,8 +17,10 @@ It does the following:
 need to be in place before the loader, or any test, reads them.
 """
 
+import json
 import logging
 from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -28,6 +30,7 @@ from playwright.async_api import Browser, Page, Playwright, async_playwright
 
 from pages.login_page import LoginError, LoginPage
 from utils.config_loader import get_credentials, load_config
+from utils.performance import get_results as get_perf_results
 
 # Load .env before any fixture runs. No effect if the file is missing.
 load_dotenv()
@@ -64,9 +67,7 @@ async def browser(
 
 
 @pytest_asyncio.fixture
-async def anonymous_page(
-    browser: Browser, config: dict[str, Any]
-) -> AsyncIterator[Page]:
+async def anonymous_page(browser: Browser, config: dict[str, Any]) -> AsyncIterator[Page]:
     """A fresh signed-out page. New context per test for clean isolation."""
     context = await browser.new_context(viewport=config["viewport"])
     page = await context.new_page()
@@ -75,9 +76,7 @@ async def anonymous_page(
 
 
 @pytest_asyncio.fixture(scope="session")
-async def auth_storage_state(
-    browser: Browser, config: dict[str, Any]
-) -> dict[str, Any]:
+async def auth_storage_state(browser: Browser, config: dict[str, Any]) -> dict[str, Any]:
     """Login once per session, return the captured storage state.
 
     Skips dependent tests if credentials are missing or if login fails.
@@ -86,8 +85,7 @@ async def auth_storage_state(
     username, password = get_credentials()
     if not username or not password:
         pytest.skip(
-            "OL_USERNAME / OL_PASSWORD not set in .env -- "
-            "tests that need login are skipped"
+            "OL_USERNAME / OL_PASSWORD not set in .env -- tests that need login are skipped"
         )
 
     context = await browser.new_context(viewport=config["viewport"])
@@ -117,3 +115,23 @@ async def page(
     page = await context.new_page()
     yield page
     await context.close()
+
+
+# Performance report: aggregate every `measure_page_performance` call
+# made during the run into one JSON file. Decision recorded in
+# README -> "Decisions Made" -> "Performance report aggregation".
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    """Dump all perf measurements to performance_report.json at the project root."""
+    results = get_perf_results()
+    if not results:
+        return
+    report = {
+        "runs": results,
+        "summary": {
+            "total": len(results),
+            "breached": sum(1 for r in results if r["breached"]),
+        },
+    }
+    report_path = Path(__file__).parent / "performance_report.json"
+    report_path.write_text(json.dumps(report, indent=2))
+    logger.info("wrote %d perf records to %s", len(results), report_path)
