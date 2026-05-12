@@ -33,7 +33,10 @@ SHELF_LABELS = {
     "already_read": "Already Read",
 }
 
-_COUNT_REGEX = re.compile(r"\((\d+)\)")
+# `[\d,]+` tolerates a thousands-separator like "(1,234)" in case
+# OpenLibrary ever renders one. Plain "(13)" is the common case today.
+# The comma is stripped before `int()`.
+_COUNT_REGEX = re.compile(r"\(([\d,]+)\)")
 
 
 class ReadingListPage:
@@ -68,7 +71,7 @@ class ReadingListPage:
             return 0
         text = (await heading.first.inner_text()).strip()
         match = _COUNT_REGEX.search(text)
-        return int(match.group(1)) if match else 0
+        return int(match.group(1).replace(",", "")) if match else 0
 
     async def get_shelf_counts(self) -> dict[str, int]:
         """Return a {shelf_key: count} dict for the three status shelves."""
