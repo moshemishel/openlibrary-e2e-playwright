@@ -16,7 +16,7 @@ from typing import Any
 import pytest
 from playwright.async_api import Page
 
-from pages.search_page import SearchPage
+from pages.search_page import search_books_by_title_under_year
 from utils.data_loader import load_data
 
 _SEARCH_CASES = load_data("search_cases.json")
@@ -24,8 +24,13 @@ _SEARCH_CASES = load_data("search_cases.json")
 
 async def test_search_returns_urls_under_max_year(page: Page, config: dict[str, Any]) -> None:
     """Happy path: a known query returns at least one URL, capped by `limit`."""
-    sp = SearchPage(page, config["base_url"])
-    urls = await sp.search_books_by_title_under_year("Dune", 1980, limit=3)
+    urls = await search_books_by_title_under_year(
+        page,
+        "Dune",
+        1980,
+        limit=3,
+        base_url=config["base_url"],
+    )
 
     assert 0 < len(urls) <= 3, f"expected 1..3 URLs, got {len(urls)}"
     for u in urls:
@@ -39,8 +44,13 @@ async def test_search_empty_when_no_results_under_year(page: Page, config: dict[
     very first result with a parseable year is > 1000, so the loop
     returns the empty accumulator.
     """
-    sp = SearchPage(page, config["base_url"])
-    urls = await sp.search_books_by_title_under_year("Dune", 1000, limit=5)
+    urls = await search_books_by_title_under_year(
+        page,
+        "Dune",
+        1000,
+        limit=5,
+        base_url=config["base_url"],
+    )
 
     assert urls == []
 
@@ -58,9 +68,12 @@ async def test_search_data_driven(case: dict[str, Any], page: Page, config: dict
     base_url. A case can pin the result to exactly empty by setting both
     expected_min_count and expected_max_count to 0.
     """
-    sp = SearchPage(page, config["base_url"])
-    urls = await sp.search_books_by_title_under_year(
-        case["query"], case["max_year"], limit=case["limit"]
+    urls = await search_books_by_title_under_year(
+        page,
+        case["query"],
+        case["max_year"],
+        limit=case["limit"],
+        base_url=config["base_url"],
     )
     min_count = case.get("expected_min_count", 0)
     max_count = case.get("expected_max_count", case["limit"])

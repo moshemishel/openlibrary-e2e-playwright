@@ -19,8 +19,8 @@ from typing import Any
 import pytest
 from playwright.async_api import Page
 
-from pages.book_page import BookPage
-from pages.reading_list_page import ReadingListPage
+from pages.book_page import BookPage, add_books_to_reading_list
+from pages.reading_list_page import ReadingListPage, assert_reading_list_count
 from utils.data_loader import load_data
 
 # Dune by Frank Herbert -- stable OpenLibrary work used as a test fixture.
@@ -44,7 +44,7 @@ async def test_add_books_to_reading_list_function(page: Page, config: dict[str, 
     random.seed(42)
     book = BookPage(page, config["base_url"])
     urls = [DUNE_PATH]
-    await book.add_books_to_reading_list(urls)
+    await add_books_to_reading_list(page, urls, base_url=config["base_url"])
     await book.goto(DUNE_PATH)
     assert await book.current_shelf() in {"want_to_read", "already_read"}
 
@@ -63,7 +63,7 @@ async def test_assert_with_current_count_passes(page: Page, config: dict[str, An
     rlp = ReadingListPage(page, config["base_url"])
     await rlp.goto()
     actual = await rlp.total_count()
-    await rlp.assert_reading_list_count(actual)
+    await assert_reading_list_count(page, actual, base_url=config["base_url"])
 
 
 async def test_assert_with_wrong_count_raises(page: Page, config: dict[str, Any]) -> None:
@@ -72,7 +72,7 @@ async def test_assert_with_wrong_count_raises(page: Page, config: dict[str, Any]
     await rlp.goto()
     actual = await rlp.total_count()
     with pytest.raises(AssertionError):
-        await rlp.assert_reading_list_count(actual + 1)
+        await assert_reading_list_count(page, actual + 1, base_url=config["base_url"])
 
 
 @pytest.mark.parametrize(
@@ -90,7 +90,7 @@ async def test_add_books_data_driven(
     """
     random.seed(42)
     book = BookPage(page, config["base_url"])
-    await book.add_books_to_reading_list(case["urls"])
+    await add_books_to_reading_list(page, case["urls"], base_url=config["base_url"])
     for url in case["urls"]:
         await book.goto(url)
         assert await book.current_shelf() in {"want_to_read", "already_read"}

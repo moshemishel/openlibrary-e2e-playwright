@@ -9,6 +9,7 @@ from playwright.async_api import Locator, Page
 logger = logging.getLogger(__name__)
 
 YEAR_REGEX = re.compile(r"\b(1[0-9]{3}|20[0-9]{2})\b")
+DEFAULT_BASE_URL = "https://openlibrary.org"
 
 
 class SearchPage:
@@ -97,7 +98,7 @@ class SearchPage:
         while len(collected) < limit:
             url = self._build_search_url(query, page_num)
             logger.info("search page %d: %s", page_num, url)
-            await self.page.goto(url)
+            await self.page.goto(url, wait_until="domcontentloaded")
 
             if total_pages is None:
                 total_pages = await self._get_total_pages()
@@ -132,3 +133,24 @@ class SearchPage:
                 break
 
         return collected
+
+
+async def search_books_by_title_under_year(
+    page: Page,
+    query: str,
+    max_year: int,
+    limit: int = 5,
+    *,
+    base_url: str = DEFAULT_BASE_URL,
+) -> list[str]:
+    """Standalone wrapper for function 1 from the assignment spec.
+
+    The implementation stays in `SearchPage` so selectors and page
+    behavior remain inside the Page Object layer. The explicit `page`
+    argument follows the executable sample from the PDF.
+    """
+    return await SearchPage(page, base_url).search_books_by_title_under_year(
+        query,
+        max_year,
+        limit,
+    )

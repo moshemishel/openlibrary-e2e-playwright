@@ -18,11 +18,16 @@ excluded -- they are not reading-list shelves.
 
 import logging
 import re
+from datetime import UTC, datetime
+from pathlib import Path
 from urllib.parse import urljoin
 
 from playwright.async_api import Page
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_BASE_URL = "https://openlibrary.org"
+SCREENSHOT_DIR = Path(__file__).parent.parent / "screenshots"
 
 # Internal key -> visible label that appears in the H2 heading text.
 # The trailing " (N)" is optional in the heading: CR-when-empty omits
@@ -37,6 +42,11 @@ SHELF_LABELS = {
 # OpenLibrary ever renders one. Plain "(13)" is the common case today.
 # The comma is stripped before `int()`.
 _COUNT_REGEX = re.compile(r"\(([\d,]+)\)")
+
+
+def _screenshot_timestamp() -> str:
+    """UTC timestamp used to keep assertion screenshots from different runs distinct."""
+    return datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
 
 
 class ReadingListPage:
@@ -87,10 +97,28 @@ class ReadingListPage:
         """Function 3 from the spec.
 
         Navigates to the landing page, sums the three status-shelf
-        counts, and asserts equality. Raises AssertionError on mismatch.
+        counts, saves a screenshot, and asserts equality. Raises
+        AssertionError on mismatch.
         """
         await self.goto()
         actual = await self.total_count()
+        SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
+        shot_name = (
+            f"assert_count_{_screenshot_timestamp()}_expected_{expected_count}_actual_{actual}.png"
+        )
+        shot_path = SCREENSHOT_DIR / shot_name
+        await self.page.screenshot(path=str(shot_path))
+        logger.info("reading-list count screenshot saved: %s", shot_path)
         assert actual == expected_count, (
             f"reading list count mismatch: expected {expected_count}, got {actual}"
         )
+
+
+async def assert_reading_list_count(
+    page: Page,
+    expected_count: int,
+    *,
+    base_url: str = DEFAULT_BASE_URL,
+) -> None:
+    """Standalone wrapper for function 3 from the assignment spec."""
+    await ReadingListPage(page, base_url).assert_reading_list_count(expected_count)

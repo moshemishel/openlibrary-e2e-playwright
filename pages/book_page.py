@@ -9,12 +9,15 @@ added book.
 import logging
 import random
 import re
+from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urljoin
 
 from playwright.async_api import Page
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_BASE_URL = "https://openlibrary.org"
 
 # How long to wait for the primary button to reflect the new state
 # after submitting the add/remove form. The submit triggers a JSON
@@ -48,6 +51,11 @@ def _work_id_from_url(url: str) -> str:
     """
     match = _WORK_ID_REGEX.search(url)
     return match.group(1) if match else "unknown"
+
+
+def _screenshot_timestamp() -> str:
+    """UTC timestamp used to keep screenshots from different runs distinct."""
+    return datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
 
 
 class BookPage:
@@ -158,7 +166,7 @@ class BookPage:
 
         Each book is added to either "Want to Read" or "Already Read",
         chosen at random per the spec. A screenshot is saved as
-        `screenshots/<idx>_<work_id>_<shelf>.png` and a log line is
+        `screenshots/<timestamp>_<idx>_<work_id>_<shelf>.png` and a log line is
         written for every book. Tests can call `random.seed(...)`
         before this function for deterministic shelf choices.
         """
@@ -168,6 +176,16 @@ class BookPage:
             await self.goto(url)
             await self.add_to_shelf(shelf)
             work_id = _work_id_from_url(url)
-            path = SCREENSHOT_DIR / f"{idx:02d}_{work_id}_{shelf}.png"
+            path = SCREENSHOT_DIR / f"{_screenshot_timestamp()}_{idx:02d}_{work_id}_{shelf}.png"
             await self.page.screenshot(path=str(path))
             logger.info("added %s to %s [shot=%s]", url, shelf, path)
+
+
+async def add_books_to_reading_list(
+    page: Page,
+    urls: list[str],
+    *,
+    base_url: str = DEFAULT_BASE_URL,
+) -> None:
+    """Standalone wrapper for function 2 from the assignment spec."""
+    await BookPage(page, base_url).add_books_to_reading_list(urls)

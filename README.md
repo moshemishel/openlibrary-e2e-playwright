@@ -2,8 +2,6 @@
 
   End-to-end automation framework for [openlibrary.org](https://openlibrary.org), built with **Playwright** and **Pytest** in Python.
 
-  > Status: Work in progress.
-
   ---
                                                                                                                                                                                                
   ## Requirements Summary
@@ -115,8 +113,11 @@
   source .venv/bin/activate    # macOS / Linux
   # .venv\Scripts\activate     # Windows
 
-  # Install dependencies (project + dev tools)
-  pip install -e ".[dev]"
+  # Install pinned dependencies
+  pip install -r requirements.txt
+
+  # Install the local package in editable mode
+  pip install -e .
                                                                                                                                                                                                
   # Install Playwright browser
   playwright install chromium
@@ -201,8 +202,9 @@
   ├── config/         # config.json with default / debug / ci profiles
   ├── utils/          # Helpers (performance, data_loader, config_loader)
   ├── conftest.py     # Pytest fixtures + session hooks
-  ├── reports/        # Generated test artifacts (gitignored)
-  ├── screenshots/    # Per-test screenshots (gitignored)
+  ├── reports/        # Generated reports; final submission artifacts are committed
+  ├── screenshots/    # Generated screenshots; final submission artifacts are committed
+  ├── requirements.txt # Pinned dependency set for reproducible local runs
   ├── pyproject.toml  # Project info, dependencies, tool configs
   └── README.md
   ```                                                                                                                                                                                          
@@ -238,6 +240,20 @@
 
   **Session artifact:** a single cookie named `session` on `openlibrary.org`. Playwright's `storage_state()` captures it automatically; `auth_storage_state` keeps it in memory only — never written to disk.
 
+  ### Public Function Wrappers
+
+  The Page Objects hold the implementation, and module-level wrappers expose
+  standalone async functions with the required assignment names:
+
+  | Function | Wrapper | Implementation |
+  |---|---|---|
+  | Search | `pages.search_page.search_books_by_title_under_year(...)` | `SearchPage.search_books_by_title_under_year(...)` |
+  | Add books | `pages.book_page.add_books_to_reading_list(...)` | `BookPage.add_books_to_reading_list(...)` |
+  | Assert count | `pages.reading_list_page.assert_reading_list_count(...)` | `ReadingListPage.assert_reading_list_count(...)` |
+
+  The wrappers accept an explicit Playwright `page` because browser state is
+  required to navigate. The POM classes still own selectors and page behavior.
+
   ### Function 1 — `search_books_by_title_under_year`
 
   **Navigation:** direct URL `/search?q={query}&mode=everything&sort=old&page={N}` — no UI typing. `sort=old` returns the oldest results first, which lets the loop stop scanning pages once a result's year exceeds `max_year`.
@@ -259,6 +275,8 @@
   ### Function 2 — `add_books_to_reading_list` (BookPage)
 
   **Navigation:** for each book URL, open the page directly. Each book page has exactly one "reading log dropper" widget (`.my-books-dropper`) — the only shelf control on the page.
+
+  **Screenshots:** every add action saves a timestamped file under `screenshots/`, so repeat runs do not overwrite previous evidence.
 
   **Selectors:**
 
@@ -294,6 +312,8 @@
   ### Function 3 — `assert_reading_list_count` (ReadingListPage)
 
   **Navigation:** one page load to `/account/books`. OpenLibrary redirects this to `/people/<username>/books`, so we do not need to know the username in advance — it works for whichever user is logged in.
+
+  **Screenshot artifact:** `assert_reading_list_count` saves a timestamped screenshot before asserting, for both passing and failing count checks.
 
   **What we count:** the sum of three "status shelves" on the landing page: **Currently Reading + Want to Read + Already Read**. Loans (active library loans from Internet Archive) and Lists (user-curated lists) are deliberately *not* counted — they are not reading-list shelves. This matches the random behaviour of function 2, which adds each book to WTR or AR at random; counting only one shelf would fail whenever a book happened to land on the other.
 
@@ -345,9 +365,11 @@
 
   **Data flow.** JSON files in `data/` feed `@pytest.mark.parametrize` through `utils/data_loader.py`. The same helper serves all three data-driven tests (search, reading list, performance).
 
+  **Performance coverage.** `tests/test_performance.py` measures search, book detail, and reading-list targets using the spec thresholds (`3000 / 2500 / 2000`). `tests/test_e2e_flow.py` also measures those three page types inside the full search -> add -> assert flow.
+
   **Auth.** One login per session. Playwright's `storage_state()` is captured in memory (`auth_storage_state` fixture) and injected into a fresh `BrowserContext` for every test that needs login. Tests stay isolated but already signed in.
 
-  **Reporting.** Two artifacts under `reports/` (gitignored): `report.html` from pytest-html, and `performance_report.json` written once at session end.
+  **Reporting.** Two artifacts under `reports/`: `report.html` from pytest-html, and `performance_report.json` written once at session end. The folders are gitignored for normal local churn, but final submission artifacts are force-added.
 
   ---
                                                                                                                                                                                                
@@ -381,11 +403,11 @@
   | Runtime overrides | `.env` file for stable values + CLI environment variables for per-run overrides. CLI takes priority. | The reading list functions need a logged-in account, so credentials must live outside git. Stable values like credentials and a default profile go in `.env` so they are not typed every time. CLI env vars (e.g. `PROFILE=debug pytest`) override `.env` for one-off changes, because `python-dotenv` does not replace env vars that are already set. | Adds one dependency: `python-dotenv`. |
   | Test data format | JSON files in `data/` (e.g., `data/search_cases.json`) | Already a dependency. Consistent with the config format. Each test case includes a `description` field used for readable IDs in pytest's report. Plays well with `@pytest.mark.parametrize`. | JSON has no comments — the `description` field replaces them. |
   | Test file split | Split by function: `test_search.py`, `test_reading_list.py`, `test_performance.py`, plus `test_e2e_flow.py` for the full integration scenario | Each file groups tests for one of the four required functions. The e2e flow file runs all four in sequence as a single end-to-end scenario. | More files. Clear file names keep them easy to find. |
-  | Function placement | Functions 1–3 are methods on POM classes. Function 4 is a module-level utility in `utils/performance.py`. | The function signatures lead the design. Functions 1–3 do not receive `page` as a parameter, so they need stored state — a class fits well. Function 4 does receive `page`, so it does not need state — a module-level function fits well. This keeps page actions in `pages/` and shared helpers in `utils/`. | None. The split follows directly from the spec's signatures. |
+  | Function placement | Functions 1–3 have standalone module-level wrappers and POM-backed implementations. Function 4 is a module-level utility in `utils/performance.py`. | The reviewer-facing API exposes the required function names as standalone `async def`s. The implementation still lives in POM classes because selectors and browser interactions belong with page-specific behavior. The wrappers accept `page` explicitly, matching the executable sample in the assignment PDF. | A thin wrapper layer adds a few lines, but removes ambiguity around the required public function shape. |
   | Authentication strategy | Log in once per session, capture Playwright's `storage_state` in memory, then inject it into a fresh browser context for every test that needs login | Each test gets a clean browser context, but already signed in. Tests do not share DOM or cookies, so they stay independent and the order they run in does not matter. This is the pattern recommended by [Playwright's own auth docs](https://playwright.dev/python/docs/auth#reusing-signed-in-state). Two fixtures are exposed: `page` is pre-authenticated; `anonymous_page` is a clean context used by the anonymous performance cases. Search tests use the authenticated `page` because OpenLibrary's search endpoint redirects anonymous headless browsers to a `/verify_human` CAPTCHA challenge. The login UI runs only once per `pytest` run. If login fails (network or bad credentials), the affected tests are skipped with `pytest.skip` instead of crashing. | Login itself is required by OpenLibrary for the reading list pages, not by our framework — credentials are supplied via `.env` (template at `.env.example`). If OpenLibrary changes its login page, the session fixture fails once at the start of the run, instead of every test failing on its own. |
   | Performance report aggregation | Collect every result in memory during the run, then write `reports/performance_report.json` once at the end (via a `pytest_sessionfinish` hook in `conftest.py`) | The spec asks for one JSON file with all results. Collecting in memory and writing once is simpler than writing on every call: a single disk write, no risk of two tests writing at the same time, and no extra I/O while tests are running. | If `pytest` crashes before the end, the file is not written. Acceptable — a partial report is not necessarily more useful than no file. |
   | Reporting toolchain | `pytest-html` for the run report + a `pytest_sessionfinish` hook for the perf JSON. | pytest-html is a one-line addition: a dep plus `--html=reports/report.html --self-contained-html` in `addopts`. Self-contained means a single HTML file that opens anywhere with no asset folder. The custom JSON aggregator is still needed because the spec asks for a specific format pytest-html does not produce. | Two artifacts instead of one. Both live under `reports/`. |
-  | Artifacts under `reports/` | Both reports (`report.html`, `performance_report.json`) live in one gitignored directory. | One folder for CI to upload as artifacts. pytest-html creates the directory on first run; the perf-report hook also calls `mkdir(parents=True, exist_ok=True)` to be safe. | None — the path resolves the same regardless of the `pytest` invocation cwd. |
+  | Artifacts under `reports/` | Both reports (`report.html`, `performance_report.json`) live under `reports/`; screenshots live under `screenshots/`. | One folder for CI/report upload, one folder for visual evidence. The directories are ignored for normal local churn, and the final submission artifacts are force-added to git. | A fresh run creates new timestamped screenshots, so old evidence may remain until manually cleaned. |
   | `pytest-asyncio` loop scope | Both `asyncio_default_fixture_loop_scope` and `asyncio_default_test_loop_scope` are set to `"session"` in `pyproject.toml` | Playwright objects (`Page`, `BrowserContext`) are bound to the event loop on which they were created. With the default mix (session loop for fixtures, function loop for tests), a page created in a session-scoped fixture and used inside a test hangs forever -- the awaitable is registered on the wrong loop's queue and never resolves, with no error. Forcing both scopes to `"session"` keeps the whole run on one loop. | All tests share one event loop, so test order can matter slightly more (a misused session-scoped fixture could leak state across tests). Mitigation: every test gets a fresh `BrowserContext`, so DOM and cookies do not leak. |
 
   ---

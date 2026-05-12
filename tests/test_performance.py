@@ -8,10 +8,10 @@ way: returns a dict of the right shape, the breach flag matches the
 threshold/metrics relationship, and the function never raises on a
 slow page.
 
-`test_perf_data_driven_anonymous` adds the JSON-file-driven sweep
-required for the Data-Driven grading item. Anonymous-only -- auth is
-already exercised by the explicit tests above, and doubling every case
-would push runtime up without adding contract coverage.
+`test_perf_data_driven` adds the JSON-file-driven sweep required for
+the Data-Driven grading item. It uses the authenticated page fixture so
+`/account/books` measures the real reading-list page rather than the
+logged-out redirect.
 """
 
 from typing import Any
@@ -102,16 +102,15 @@ async def test_no_breach_on_high_threshold_authenticated(
     _PERF_CASES,
     ids=[c["description"] for c in _PERF_CASES],
 )
-async def test_perf_data_driven_anonymous(
-    case: dict[str, Any], anonymous_page: Page, config: dict[str, Any]
-) -> None:
+async def test_perf_data_driven(case: dict[str, Any], page: Page, config: dict[str, Any]) -> None:
     """Cases from data/perf_targets.json.
 
-    Sweeps a list of target URLs against per-case thresholds. The shape
-    contract must hold for every target; the breach flag is whatever it
-    turns out to be (we don't pin it -- the thresholds in JSON are real
-    SLOs, not deterministic edge cases).
+    Sweeps the required page types against their spec thresholds:
+    search results, book detail, and reading list. The shape contract
+    must hold for every target; the breach flag is whatever it turns
+    out to be (we don't pin it -- the thresholds in JSON are real SLOs,
+    not deterministic edge cases).
     """
     url = config["base_url"] + case["path"]
-    record = await measure_page_performance(anonymous_page, url, case["threshold_ms"])
+    record = await measure_page_performance(page, url, case["threshold_ms"])
     _assert_record_shape(record, url, case["threshold_ms"])
