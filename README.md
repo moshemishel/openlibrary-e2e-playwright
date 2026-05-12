@@ -46,7 +46,7 @@
 
   - Measure `load_time_ms`, `dom_content_loaded_ms`, and `first_paint_ms`.
   - If a page is slower than the threshold, write a warning to the log. Do not fail the test.
-  - After the run, save all results to a file called `performance_report.json`.
+  - After the run, save all results to `reports/performance_report.json`.
 
   **Per-page thresholds:**
 
@@ -83,8 +83,8 @@
   |---|---|---|
   | 1 | Public GitHub repository | Public access for the reviewer |
   | 2 | `README.md` | Setup, run, architecture, limitations |
-  | 3 | Run report | One of: Allure / HTML / JUnit XML |
-  | 4 | `performance_report.json` | Created by task #4 |
+  | 3 | `reports/report.html` | Self-contained HTML run report (pytest-html) |
+  | 4 | `reports/performance_report.json` | Aggregated output of `measure_page_performance` |
   | 5 | `ReadMeAIBugs.md` | Bug analysis exercise — at least 3 bugs, each with explanation and fix |
 
   ---
@@ -97,7 +97,7 @@
   | Browser automation | [Playwright](https://playwright.dev/python/) |
   | Test framework | [Pytest](https://docs.pytest.org/) + `pytest-asyncio` |
   | Linting / Formatting | [Ruff](https://docs.astral.sh/ruff/) |
-  | Reporting | _Not decided yet. Will start with Playwright's built-in HTML report. May add Allure later if there is time. JUnit XML is always available via pytest._ |
+  | Reporting | [pytest-html](https://pytest-html.readthedocs.io/) — self-contained HTML at `reports/report.html`. Custom JSON aggregation at `reports/performance_report.json` for `measure_page_performance` results. |
 
   ---
 
@@ -195,11 +195,14 @@
 
   ```
   openlibrary-e2e-playwright/
-  ├── pages/          # POM classes
-  ├── tests/          # Pytest tests
-  ├── data/           # Test input data (JSON)
-  ├── config/         # Configs, profiles, thresholds
-  ├── utils/          # Helpers (performance, logging, files)
+  ├── pages/          # POM classes (Login, Search, Book, ReadingList)
+  ├── tests/          # Pytest tests — one file per spec function + e2e flow
+  ├── data/           # Test input data — JSON cases for parametrize
+  ├── config/         # config.json with default / debug / ci profiles
+  ├── utils/          # Helpers (performance, data_loader, config_loader)
+  ├── conftest.py     # Pytest fixtures + session hooks
+  ├── reports/        # Generated test artifacts (gitignored)
+  ├── screenshots/    # Per-test screenshots (gitignored)
   ├── pyproject.toml  # Project info, dependencies, tool configs
   └── README.md
   ```                                                                                                                                                                                          
@@ -328,14 +331,39 @@
   ---
   
   ## Architecture
-  
-  > _Will be added after the POM design is done. Will cover: page classes, base class, how data is loaded, how config works, and how reports are made._
+
+  The framework has four layers:
+
+  | Layer | Files | Role |
+  |---|---|---|
+  | Page Objects | `pages/` | One class per page. Each holds `page` and `base_url` only. |
+  | Tests | `tests/` | One file per spec function plus `test_e2e_flow.py` for the full chain. |
+  | Helpers | `utils/` | `performance.py`, `data_loader.py`, `config_loader.py`. |
+  | Fixtures + hooks | `conftest.py` | Session browser, `auth_storage_state`, per-test page contexts, and the `pytest_sessionfinish` hook that writes the perf report. |
+
+  **No POM base class.** Every page class shares the same two fields (`page`, `base_url`). A base class would save a few lines and add one indirection. Kept flat.
+
+  **Data flow.** JSON files in `data/` feed `@pytest.mark.parametrize` through `utils/data_loader.py`. The same helper serves all three data-driven tests (search, reading list, performance).
+
+  **Auth.** One login per session. Playwright's `storage_state()` is captured in memory (`auth_storage_state` fixture) and injected into a fresh `BrowserContext` for every test that needs login. Tests stay isolated but already signed in.
+
+  **Reporting.** Two artifacts under `reports/` (gitignored): `report.html` from pytest-html, and `performance_report.json` written once at session end.
 
   ---
                                                                                                                                                                                                
   ## Limitations
 
   - **Config merge depth.** Profile merging is shallow (`{**default, **active}`). A profile that wants to override a single key inside `thresholds` must restate all three keys. No profile in this project needs that, so the loader stays simple. A deeper merge would be one `if isinstance(v, dict)` in the loader if a future profile ever needs it.
+
+  - **No reading-list cleanup.** Function 2 adds books; the account count only goes up over runs. The idempotent `add_to_shelf` prevents duplicates, and the data-driven + E2E tests use delta-based assertions (`0 <= delta <= len(urls)`), so the suite passes either way. A cleanup mode is in **Open Decisions** below.
+
+  - **Single browser (Chromium).** The framework launches `playwright_instance.chromium.launch(...)` only. Firefox and WebKit are reachable via Playwright but not parameterised here. A cross-browser sweep would multiply runtime, so it is left out of this iteration.
+
+  - **Sequential test run.** All tests share one event loop (forced via `asyncio_default_*_loop_scope = "session"` — see **Decisions Made** below). Tests are isolated at the `BrowserContext` level but run one at a time. `pytest-xdist` would need a different loop strategy and is not wired up.
+
+  - **External availability.** Tests hit live `openlibrary.org`. Outages, rate limits, or layout changes on OpenLibrary's side will fail the run. There is no mock layer.
+
+  - **CAPTCHA on anonymous search.** OpenLibrary redirects anonymous headless browsers to `/verify_human` on the search endpoint. The search tests therefore use the authenticated `page` fixture (which passes the challenge) instead of `anonymous_page`. If CAPTCHA were ever extended to authenticated traffic, the framework would need a real challenge-handling strategy.
 
   ---
                                                                                                                                                                                                
@@ -346,7 +374,7 @@
   | Area | Decision | Reason | Trade-off |
   |---|---|---|---|
   | Async API | Use Playwright async API (`playwright.async_api`) | The four required function signatures in the spec are all `async def`. The spec's example also calls them with `await`. Choosing sync would force changing the signatures and break the contract. |
-  | Test runner | Add `pytest` as the test runner | The spec does not ask for a runner. Pytest helps me with two of the grading items so far: Data-Driven (10%) — `parametrize` reads test cases from a JSON file; Robustness (30%) — fixtures keep each test clean from the others. The reporting choice is still open, but pytest leaves the option open for native JUnit XML, HTML, or Allure when I decide. The four required functions stay simple, and pytest only calls them from `tests/`. | Adds a dependency the spec did not ask for. |
+  | Test runner | Add `pytest` as the test runner | The spec does not ask for a runner. Pytest covers three grading items: Data-Driven (10%) — `parametrize` reads test cases from JSON files; Robustness (30%) — fixtures keep each test clean from the others; Reports (5%) — `pytest-html` produces the run report. The four required functions stay simple, and pytest only calls them from `tests/`. | Adds a dependency the spec did not ask for. |
   | Async fixture setup | Raw `async_playwright` in `conftest.py` (not the `pytest-playwright` plugin) | The official `pytest-playwright` plugin is sync-only. Our signatures need async, so a small custom `conftest.py` with async fixtures matches the contract and gives full control. | I write the fixture code myself, about 15 lines. The official plugin includes some extras like auto-screenshots on fail and a `--browser firefox` CLI flag. I will add these only if I need them. |
   | Configuration storage | Single JSON file at `config/config.json` | One source of truth. Booleans and numbers keep their real types (no string parsing for the primary config). |
   | Profiles | Profile blocks (`default`, `debug`, `ci`) inside the same JSON file | All profiles are visible in one view. The active profile is chosen via the `PROFILE` env var. Merging happens at load time: `{**default, **active}`. | A reviewer scanning only the folder tree may not see the profiles at first — the README points them in. |
@@ -354,8 +382,10 @@
   | Test data format | JSON files in `data/` (e.g., `data/search_cases.json`) | Already a dependency. Consistent with the config format. Each test case includes a `description` field used for readable IDs in pytest's report. Plays well with `@pytest.mark.parametrize`. | JSON has no comments — the `description` field replaces them. |
   | Test file split | Split by function: `test_search.py`, `test_reading_list.py`, `test_performance.py`, plus `test_e2e_flow.py` for the full integration scenario | Each file groups tests for one of the four required functions. The e2e flow file runs all four in sequence as a single end-to-end scenario. | More files. Clear file names keep them easy to find. |
   | Function placement | Functions 1–3 are methods on POM classes. Function 4 is a module-level utility in `utils/performance.py`. | The function signatures lead the design. Functions 1–3 do not receive `page` as a parameter, so they need stored state — a class fits well. Function 4 does receive `page`, so it does not need state — a module-level function fits well. This keeps page actions in `pages/` and shared helpers in `utils/`. | None. The split follows directly from the spec's signatures. |
-  | Authentication strategy | Log in once per session, capture Playwright's `storage_state` in memory, then inject it into a fresh browser context for every test that needs login | Each test gets a clean browser context, but already signed in. Tests do not share DOM or cookies, so they stay independent and the order they run in does not matter. This is the pattern recommended by [Playwright's own auth docs](https://playwright.dev/python/docs/auth#reusing-signed-in-state). Two fixtures are exposed: `page` is pre-authenticated; `anonymous_page` is a clean context for tests that do not need login (search, performance). The login UI runs only once per `pytest` run. If login fails (network or bad credentials), the affected tests are skipped with `pytest.skip` instead of crashing. | Login itself is required by OpenLibrary for the reading list pages, not by our framework — credentials are supplied via `.env` (template at `.env.example`). If OpenLibrary changes its login page, the session fixture fails once at the start of the run, instead of every test failing on its own. |
-  | Performance report aggregation | Collect every result in memory during the run, then write `performance_report.json` once at the end (via a `pytest_sessionfinish` hook in `conftest.py`) | The spec asks for one JSON file with all results. Collecting in memory and writing once is simpler than writing on every call: a single disk write, no risk of two tests writing at the same time, and no extra I/O while tests are running. | If `pytest` crashes before the end, the file is not written. Acceptable — a partial report is not necessarily more useful than no file. |
+  | Authentication strategy | Log in once per session, capture Playwright's `storage_state` in memory, then inject it into a fresh browser context for every test that needs login | Each test gets a clean browser context, but already signed in. Tests do not share DOM or cookies, so they stay independent and the order they run in does not matter. This is the pattern recommended by [Playwright's own auth docs](https://playwright.dev/python/docs/auth#reusing-signed-in-state). Two fixtures are exposed: `page` is pre-authenticated; `anonymous_page` is a clean context used by the anonymous performance cases. Search tests use the authenticated `page` because OpenLibrary's search endpoint redirects anonymous headless browsers to a `/verify_human` CAPTCHA challenge. The login UI runs only once per `pytest` run. If login fails (network or bad credentials), the affected tests are skipped with `pytest.skip` instead of crashing. | Login itself is required by OpenLibrary for the reading list pages, not by our framework — credentials are supplied via `.env` (template at `.env.example`). If OpenLibrary changes its login page, the session fixture fails once at the start of the run, instead of every test failing on its own. |
+  | Performance report aggregation | Collect every result in memory during the run, then write `reports/performance_report.json` once at the end (via a `pytest_sessionfinish` hook in `conftest.py`) | The spec asks for one JSON file with all results. Collecting in memory and writing once is simpler than writing on every call: a single disk write, no risk of two tests writing at the same time, and no extra I/O while tests are running. | If `pytest` crashes before the end, the file is not written. Acceptable — a partial report is not necessarily more useful than no file. |
+  | Reporting toolchain | `pytest-html` for the run report + a `pytest_sessionfinish` hook for the perf JSON. | pytest-html is a one-line addition: a dep plus `--html=reports/report.html --self-contained-html` in `addopts`. Self-contained means a single HTML file that opens anywhere with no asset folder. The custom JSON aggregator is still needed because the spec asks for a specific format pytest-html does not produce. | Two artifacts instead of one. Both live under `reports/`. |
+  | Artifacts under `reports/` | Both reports (`report.html`, `performance_report.json`) live in one gitignored directory. | One folder for CI to upload as artifacts. pytest-html creates the directory on first run; the perf-report hook also calls `mkdir(parents=True, exist_ok=True)` to be safe. | None — the path resolves the same regardless of the `pytest` invocation cwd. |
   | `pytest-asyncio` loop scope | Both `asyncio_default_fixture_loop_scope` and `asyncio_default_test_loop_scope` are set to `"session"` in `pyproject.toml` | Playwright objects (`Page`, `BrowserContext`) are bound to the event loop on which they were created. With the default mix (session loop for fixtures, function loop for tests), a page created in a session-scoped fixture and used inside a test hangs forever -- the awaitable is registered on the wrong loop's queue and never resolves, with no error. Forcing both scopes to `"session"` keeps the whole run on one loop. | All tests share one event loop, so test order can matter slightly more (a misused session-scoped fixture could leak state across tests). Mitigation: every test gets a fresh `BrowserContext`, so DOM and cookies do not leak. |
 
   ---
@@ -365,8 +395,7 @@
   These decisions are still open. They will be made when needed during the work. Listed here to be open about what is not yet decided:
 
   | Area | Pending decision |
-  |---|---|                                                                                                                                                                                    
-  | Reporting tool | Playwright HTML built-in vs Allure (added later if time) |
+  |---|---|
   | CI/CD | Optional extra. May add a GitHub Actions workflow. |
   | Reading list cleanup mode | Planned: an opt-in CLI flag (e.g. `--clean-reading-list` or env var `CLEAN_READING_LIST=true`) that, when set, wipes every shelf (Currently Reading + Want to Read + Already Read) **before** the run starts and again **after** it ends. Default behaviour stays as today: no cleanup, tests rely on the idempotency of `add_to_shelf`. Rationale: the project's OL account is a throwaway used only for this exercise, so a full wipe is safe when requested, and it produces a fully deterministic starting state for data-driven and E2E runs. Implementation will be a `pytest_addoption` + a session-scoped fixture that iterates the three shelf pages and calls `remove_from_shelf` per book, gated on the flag. To be added after function 4 and the data-driven refactor are in place. |
 
