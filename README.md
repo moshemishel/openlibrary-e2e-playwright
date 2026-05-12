@@ -253,6 +253,41 @@
 
   **Alternative considered:** OpenLibrary's JSON API at `https://openlibrary.org/search.json?q=...` returns `first_publish_year` as an integer — fully stable. Rejected because it bypasses the UI/POM architecture, which is 40% of the grade. Kept on record for future reference.
 
+  ### Function 2 — `add_books_to_reading_list` (BookPage)
+
+  **Navigation:** for each book URL, open the page directly. Each book page has exactly one "reading log dropper" widget (`.my-books-dropper`) — the only shelf control on the page.
+
+  **Selectors:**
+
+  | What | Selector | Source |
+  |---|---|---|
+  | Dropper container (scope) | `.my-books-dropper` | CSS class |
+  | Primary action button (current shelf) | `get_by_role("button", name=<shelf label>)` scoped to `form.primary-action` | Accessible name (Tier 1) |
+  | Open dropdown (chevron arrow) | `.generic-dropper__dropclick` | CSS class |
+  | Add to "Want to Read" (dropdown) | `get_by_role("button", name="Want to Read")` scoped to `.read-statuses` | Accessible name (Tier 1) |
+  | Add to "Already Read" (dropdown) | `get_by_role("button", name="Already Read")` scoped to `.read-statuses` | Accessible name (Tier 1) |
+  | Remove from shelf (dropdown) | `get_by_role("button", name="Remove From Shelf")` scoped to `.read-statuses` | Accessible name (Tier 1) |
+
+  **State signal:** the primary button's class tells us which shelf the book is on.
+
+  - `.book-progress-btn.unactivated` → book is on no shelf. Primary button shows "Want to Read" (the default call-to-action).
+  - `.book-progress-btn.activated` → book is on a shelf. The shelf name is the primary button's text (`Want to Read` / `Already Read` / `Currently Reading`).
+
+  **Why two scoping containers (`form.primary-action` and `.read-statuses`)?**
+
+  Two separate buttons in the DOM share the same accessible name. For example, "Want to Read" appears once as the primary call-to-action button, and once again as a shelf-switch button inside the dropdown panel. Without scoping, `get_by_role("button", name="Want to Read")` matches both at once and Playwright raises a strict-mode error. We split the search area by container:
+
+  - `form.primary-action` — the primary call-to-action wrapper. One button only.
+  - `.read-statuses` — the shelf-switcher panel inside the dropdown. Three "add" buttons plus one "remove" button.
+
+  **Why fall back to CSS for the dropdown trigger?**
+
+  The dropdown's chevron is an `<a class="generic-dropper__dropclick" href="javascript:;">` with no accessible name, no `aria-label`, no `aria-expanded`, no `title`, and no inner text. Playwright's Tier 1 selectors (`get_by_role`, `get_by_label`, etc.) all need an accessible name to filter on, and this element has none. CSS class is the only available handle. This is also a real accessibility gap on OpenLibrary's side; it is recorded in `ReadMeAIBugs.md`.
+
+  **Why CSS for the scoping containers themselves?**
+
+  The class names `primary-action` and `read-statuses` are *semantic* — they describe what the area is, not how it looks. They are less likely to be renamed in a redesign than visual classes (e.g. `.btn-blue-large`). There is no Tier 1 way to say "the form that is the primary action" because forms have no accessible role or name. In this case, a stable CSS class is the cleanest available choice.
+
   ---
   
   ## Architecture
