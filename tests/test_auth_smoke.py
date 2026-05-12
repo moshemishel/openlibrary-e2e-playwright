@@ -14,9 +14,7 @@ from typing import Any
 from playwright.async_api import Page
 
 
-async def test_logged_in_context_reaches_account_books(
-    page: Page, config: dict[str, Any]
-) -> None:
+async def test_logged_in_context_reaches_account_books(page: Page, config: dict[str, Any]) -> None:
     """`/account/books` requires login; logged-out users get redirected."""
     await page.goto(f"{config['base_url']}/account/books")
     assert "/account/login" not in page.url, (
