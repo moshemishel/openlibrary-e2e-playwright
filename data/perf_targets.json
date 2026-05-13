@@ -1,7 +1,7 @@
 [
   {
     "description": "search results page",
-    "path": "/search?q=python",
+    "path": "/search?q=title%3A+%22python%22&mode=everything&sort=old&page=1",
     "threshold_ms": 3000
   },
   {

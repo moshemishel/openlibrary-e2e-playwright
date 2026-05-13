@@ -23,7 +23,7 @@ from playwright.async_api import Page
 
 from pages.book_page import BookPage, add_books_to_reading_list
 from pages.reading_list_page import ReadingListPage, assert_reading_list_count
-from pages.search_page import search_books_by_title_under_year
+from pages.search_page import build_title_search_url, search_books_by_title_under_year
 from utils.performance import measure_page_performance
 
 
@@ -75,7 +75,7 @@ async def test_e2e_search_add_assert_measure(page: Page, config: dict[str, Any])
     records = [
         await measure_page_performance(
             page,
-            f"{base_url}/search?q=Dune&mode=everything&sort=old&page=1",
+            build_title_search_url(base_url, "Dune"),
             threshold_ms=config["thresholds"]["search"],
         ),
         await measure_page_performance(

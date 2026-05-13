@@ -5,6 +5,7 @@ import re
 from urllib.parse import quote_plus, urljoin
 
 from playwright.async_api import Locator, Page
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 logger = logging.getLogger(__name__)
 
@@ -15,8 +16,8 @@ DEFAULT_BASE_URL = "https://openlibrary.org"
 class SearchPage:
     """OpenLibrary search results page.
 
-    Holds the Playwright `page` and the `base_url` as state, so the public
-    function signature does not need to receive them (matches the spec).
+    Holds the Playwright `page` and `base_url` for the POM implementation.
+    The module-level wrapper accepts `page` explicitly and delegates here.
     """
 
     SEARCH_PATH = "/search"
@@ -24,17 +25,14 @@ class SearchPage:
     RESULT_LINK = '[itemprop="name"] a[itemprop="url"]'
     RESULT_DETAILS_SPAN = ".resultDetails span"
     PAGINATION = "ol-pagination"
+    VERIFY_HUMAN_BUTTON = "#verify-human-btn"
 
     def __init__(self, page: Page, base_url: str) -> None:
         self.page = page
         self.base_url = base_url
 
     def _build_search_url(self, query: str, page_num: int) -> str:
-        # sort=old returns oldest first -- lets us stop early when year > max_year.
-        return (
-            f"{self.base_url}{self.SEARCH_PATH}"
-            f"?q={quote_plus(query)}&mode=everything&sort=old&page={page_num}"
-        )
+        return build_title_search_url(self.base_url, query, page_num)
 
     async def _get_total_pages(self) -> int:
         """Read total page count from the <ol-pagination> web component.
@@ -51,6 +49,23 @@ class SearchPage:
             return int(total) if total else 1
         except ValueError:
             return 1
+
+    async def _handle_verify_human_if_present(self) -> None:
+        """Click OpenLibrary's lightweight verify-human prompt when it appears."""
+        button = self.page.locator(self.VERIFY_HUMAN_BUTTON)
+        if await button.count() == 0:
+            return
+
+        logger.warning("OpenLibrary verify-human prompt detected on search page")
+        await button.click()
+        try:
+            await self.page.wait_for_load_state("domcontentloaded", timeout=10_000)
+        except PlaywrightTimeoutError:
+            logger.warning("verify-human click did not reach domcontentloaded before timeout")
+        try:
+            await button.wait_for(state="detached", timeout=10_000)
+        except PlaywrightTimeoutError:
+            logger.warning("verify-human button still present after click")
 
     async def _extract_year(self, item: Locator) -> int | None:
         """Pull a 4-digit year (1000-2099) out of the result's details text.
@@ -99,6 +114,7 @@ class SearchPage:
             url = self._build_search_url(query, page_num)
             logger.info("search page %d: %s", page_num, url)
             await self.page.goto(url, wait_until="domcontentloaded")
+            await self._handle_verify_human_if_present()
 
             if total_pages is None:
                 total_pages = await self._get_total_pages()
@@ -133,6 +149,21 @@ class SearchPage:
                 break
 
         return collected
+
+
+def build_title_search_url(base_url: str, query: str, page_num: int = 1) -> str:
+    """Build a UI search URL constrained to OpenLibrary's title field.
+
+    OpenLibrary supports query syntax inside `q`; `title: "Dune"` must
+    be URL-encoded as `title%3A+%22Dune%22`. Use `quote_plus` here so
+    spaces, quotes, and punctuation are encoded consistently.
+    """
+    title_query = f'title: "{query}"'
+    encoded_query = quote_plus(title_query)
+    return (
+        f"{base_url}{SearchPage.SEARCH_PATH}"
+        f"?q={encoded_query}&mode=everything&sort=old&page={page_num}"
+    )
 
 
 async def search_books_by_title_under_year(

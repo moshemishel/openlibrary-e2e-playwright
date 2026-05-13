@@ -117,8 +117,8 @@ async def page(
     await context.close()
 
 
-# Performance report: aggregate every `measure_page_performance` call
-# made during the run into one JSON file. Decision recorded in
+# Performance report: aggregate every reportable `measure_page_performance`
+# call made during the run into one JSON file. Decision recorded in
 # README -> "Decisions Made" -> "Performance report aggregation".
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     """Dump all perf measurements to reports/performance_report.json.

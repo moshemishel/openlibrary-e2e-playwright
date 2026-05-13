@@ -61,9 +61,8 @@ def _screenshot_timestamp() -> str:
 class BookPage:
     """OpenLibrary book/work page.
 
-    Holds the Playwright `page` and the `base_url` as state, so the
-    public function signature does not need to receive them (matches
-    the spec).
+    Holds the Playwright `page` and `base_url` for the POM implementation.
+    The module-level wrapper accepts `page` explicitly and delegates here.
     """
 
     DROPPER = ".my-books-dropper"

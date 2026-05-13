@@ -8,10 +8,12 @@ way: returns a dict of the right shape, the breach flag matches the
 threshold/metrics relationship, and the function never raises on a
 slow page.
 
-`test_perf_data_driven` adds the JSON-file-driven sweep required for
-the Data-Driven grading item. It uses the authenticated page fixture so
-`/account/books` measures the real reading-list page rather than the
-logged-out redirect.
+The artificial threshold checks use the internal non-reporting helper,
+so the final `performance_report.json` contains only real spec-threshold
+measurements. `test_perf_data_driven` adds the JSON-file-driven sweep
+required for the Data-Driven grading item. It uses the authenticated
+page fixture so `/account/books` measures the real reading-list page
+rather than the logged-out redirect.
 """
 
 from typing import Any
@@ -20,7 +22,7 @@ import pytest
 from playwright.async_api import Page
 
 from utils.data_loader import load_data
-from utils.performance import measure_page_performance
+from utils.performance import _measure_page_performance, measure_page_performance
 
 _PERF_CASES = load_data("perf_targets.json")
 
@@ -51,14 +53,24 @@ def _assert_record_shape(record: dict[str, Any], url: str, threshold: int) -> No
 async def test_record_shape_anonymous(anonymous_page: Page, config: dict[str, Any]) -> None:
     """Anonymous: returns a record with the three required metrics + meta."""
     url = config["base_url"]
-    record = await measure_page_performance(anonymous_page, url, HIGH_THRESHOLD_MS)
+    record = await _measure_page_performance(
+        anonymous_page,
+        url,
+        HIGH_THRESHOLD_MS,
+        record_result=False,
+    )
     _assert_record_shape(record, url, HIGH_THRESHOLD_MS)
 
 
 async def test_record_shape_authenticated(page: Page, config: dict[str, Any]) -> None:
     """Authenticated: returns a record with the three required metrics + meta."""
     url = f"{config['base_url']}/account/books"
-    record = await measure_page_performance(page, url, HIGH_THRESHOLD_MS)
+    record = await _measure_page_performance(
+        page,
+        url,
+        HIGH_THRESHOLD_MS,
+        record_result=False,
+    )
     _assert_record_shape(record, url, HIGH_THRESHOLD_MS)
 
 
@@ -66,7 +78,12 @@ async def test_breach_flag_true_on_low_threshold_anonymous(
     anonymous_page: Page, config: dict[str, Any]
 ) -> None:
     """A 1 ms threshold breaches on any real page load (function still returns)."""
-    record = await measure_page_performance(anonymous_page, config["base_url"], LOW_THRESHOLD_MS)
+    record = await _measure_page_performance(
+        anonymous_page,
+        config["base_url"],
+        LOW_THRESHOLD_MS,
+        record_result=False,
+    )
     assert record["breached"] is True
 
 
@@ -74,8 +91,11 @@ async def test_breach_flag_true_on_low_threshold_authenticated(
     page: Page, config: dict[str, Any]
 ) -> None:
     """Same as above, but exercises the authenticated landing page."""
-    record = await measure_page_performance(
-        page, f"{config['base_url']}/account/books", LOW_THRESHOLD_MS
+    record = await _measure_page_performance(
+        page,
+        f"{config['base_url']}/account/books",
+        LOW_THRESHOLD_MS,
+        record_result=False,
     )
     assert record["breached"] is True
 
@@ -84,15 +104,23 @@ async def test_no_breach_on_high_threshold_anonymous(
     anonymous_page: Page, config: dict[str, Any]
 ) -> None:
     """A 60 s threshold should not breach on a normally-responsive site."""
-    record = await measure_page_performance(anonymous_page, config["base_url"], HIGH_THRESHOLD_MS)
+    record = await _measure_page_performance(
+        anonymous_page,
+        config["base_url"],
+        HIGH_THRESHOLD_MS,
+        record_result=False,
+    )
     assert record["breached"] is False
 
 
 async def test_no_breach_on_high_threshold_authenticated(
     page: Page, config: dict[str, Any]
 ) -> None:
-    record = await measure_page_performance(
-        page, f"{config['base_url']}/account/books", HIGH_THRESHOLD_MS
+    record = await _measure_page_performance(
+        page,
+        f"{config['base_url']}/account/books",
+        HIGH_THRESHOLD_MS,
+        record_result=False,
     )
     assert record["breached"] is False
 

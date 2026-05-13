@@ -16,10 +16,19 @@ from typing import Any
 import pytest
 from playwright.async_api import Page
 
-from pages.search_page import search_books_by_title_under_year
+from pages.search_page import build_title_search_url, search_books_by_title_under_year
 from utils.data_loader import load_data
 
 _SEARCH_CASES = load_data("search_cases.json")
+
+
+def test_title_search_url_is_encoded(config: dict[str, Any]) -> None:
+    """The UI search must be constrained to the title field, not global q search."""
+    url = build_title_search_url(config["base_url"], "Dune", page_num=2)
+
+    assert url == (
+        "https://openlibrary.org/search?q=title%3A+%22Dune%22&mode=everything&sort=old&page=2"
+    )
 
 
 async def test_search_returns_urls_under_max_year(page: Page, config: dict[str, Any]) -> None:

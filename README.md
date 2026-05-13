@@ -6,7 +6,7 @@
                                                                                                                                                                                                
   ## Requirements Summary
   
-  The project must implement four async functions with these exact signatures:
+  The assignment lists these four async business functions:
 
   ### 1. Search books by title, filtered by max publication year
 
@@ -251,12 +251,15 @@
   | Add books | `pages.book_page.add_books_to_reading_list(...)` | `BookPage.add_books_to_reading_list(...)` |
   | Assert count | `pages.reading_list_page.assert_reading_list_count(...)` | `ReadingListPage.assert_reading_list_count(...)` |
 
-  The wrappers accept an explicit Playwright `page` because browser state is
-  required to navigate. The POM classes still own selectors and page behavior.
+  The assignment's signature list shows the business parameters only, while
+  the executable Playwright sample in the PDF passes a browser `page`. This
+  project follows the executable shape: wrappers accept `page` explicitly and
+  delegate to POM classes. Passing `page` keeps browser state visible and avoids
+  hidden globals, while the POM classes still own selectors and page behavior.
 
   ### Function 1 — `search_books_by_title_under_year`
 
-  **Navigation:** direct URL `/search?q={query}&mode=everything&sort=old&page={N}` — no UI typing. `sort=old` returns the oldest results first, which lets the loop stop scanning pages once a result's year exceeds `max_year`.
+  **Navigation:** direct URL using OpenLibrary's title query syntax, for example `/search?q=title%3A+%22Dune%22&mode=everything&sort=old&page={N}` — no UI typing. The raw query is `title: "Dune"` and the code encodes it with `quote_plus`. `sort=old` returns oldest results first, which lets the loop stop scanning once a result's year exceeds `max_year`.
 
   **Selectors:**
 
@@ -303,7 +306,7 @@
 
   **Why fall back to CSS for the dropdown trigger?**
 
-  The dropdown's chevron is an `<a class="generic-dropper__dropclick" href="javascript:;">` with no accessible name, no `aria-label`, no `aria-expanded`, no `title`, and no inner text. Playwright's Tier 1 selectors (`get_by_role`, `get_by_label`, etc.) all need an accessible name to filter on, and this element has none. CSS class is the only available handle. This is also a real accessibility gap on OpenLibrary's side; it is recorded in `ReadMeAIBugs.md`.
+  The dropdown's chevron is an `<a class="generic-dropper__dropclick" href="javascript:;">` with no accessible name, no `aria-label`, no `aria-expanded`, no `title`, and no inner text. Playwright's Tier 1 selectors (`get_by_role`, `get_by_label`, etc.) all need an accessible name to filter on, and this element has none. CSS class is the only available handle.
 
   **Why CSS for the scoping containers themselves?**
 
@@ -369,7 +372,7 @@
 
   **Auth.** One login per session. Playwright's `storage_state()` is captured in memory (`auth_storage_state` fixture) and injected into a fresh `BrowserContext` for every test that needs login. Tests stay isolated but already signed in.
 
-  **Reporting.** Two artifacts under `reports/`: `report.html` from pytest-html, and `performance_report.json` written once at session end. The folders are gitignored for normal local churn, but final submission artifacts are force-added.
+  **Reporting.** Two artifacts under `reports/`: `report.html` from pytest-html, and `performance_report.json` written once at session end. The performance JSON contains only reportable spec-threshold measurements; internal threshold edge-case tests are excluded from the final artifact. The folders are gitignored for normal local churn, but final submission artifacts are force-added.
 
   ---
                                                                                                                                                                                                
@@ -377,7 +380,7 @@
 
   - **Config merge depth.** Profile merging is shallow (`{**default, **active}`). A profile that wants to override a single key inside `thresholds` must restate all three keys. No profile in this project needs that, so the loader stays simple. A deeper merge would be one `if isinstance(v, dict)` in the loader if a future profile ever needs it.
 
-  - **No reading-list cleanup.** Function 2 adds books; the account count only goes up over runs. The idempotent `add_to_shelf` prevents duplicates, and the data-driven + E2E tests use delta-based assertions (`0 <= delta <= len(urls)`), so the suite passes either way. A cleanup mode is in **Open Decisions** below.
+  - **No reading-list cleanup.** Function 2 adds books; the account count only goes up over runs. The idempotent `add_to_shelf` prevents duplicates, and the data-driven + E2E tests use delta-based assertions (`0 <= delta <= len(urls)`), so the suite passes either way. An optional cleanup mode is listed under **Optional Future Improvements** below.
 
   - **Single browser (Chromium).** The framework launches `playwright_instance.chromium.launch(...)` only. Firefox and WebKit are reachable via Playwright but not parameterised here. A cross-browser sweep would multiply runtime, so it is left out of this iteration.
 
@@ -405,21 +408,21 @@
   | Test file split | Split by function: `test_search.py`, `test_reading_list.py`, `test_performance.py`, plus `test_e2e_flow.py` for the full integration scenario | Each file groups tests for one of the four required functions. The e2e flow file runs all four in sequence as a single end-to-end scenario. | More files. Clear file names keep them easy to find. |
   | Function placement | Functions 1–3 have standalone module-level wrappers and POM-backed implementations. Function 4 is a module-level utility in `utils/performance.py`. | The reviewer-facing API exposes the required function names as standalone `async def`s. The implementation still lives in POM classes because selectors and browser interactions belong with page-specific behavior. The wrappers accept `page` explicitly, matching the executable sample in the assignment PDF. | A thin wrapper layer adds a few lines, but removes ambiguity around the required public function shape. |
   | Authentication strategy | Log in once per session, capture Playwright's `storage_state` in memory, then inject it into a fresh browser context for every test that needs login | Each test gets a clean browser context, but already signed in. Tests do not share DOM or cookies, so they stay independent and the order they run in does not matter. This is the pattern recommended by [Playwright's own auth docs](https://playwright.dev/python/docs/auth#reusing-signed-in-state). Two fixtures are exposed: `page` is pre-authenticated; `anonymous_page` is a clean context used by the anonymous performance cases. Search tests use the authenticated `page` because OpenLibrary's search endpoint redirects anonymous headless browsers to a `/verify_human` CAPTCHA challenge. The login UI runs only once per `pytest` run. If login fails (network or bad credentials), the affected tests are skipped with `pytest.skip` instead of crashing. | Login itself is required by OpenLibrary for the reading list pages, not by our framework — credentials are supplied via `.env` (template at `.env.example`). If OpenLibrary changes its login page, the session fixture fails once at the start of the run, instead of every test failing on its own. |
-  | Performance report aggregation | Collect every result in memory during the run, then write `reports/performance_report.json` once at the end (via a `pytest_sessionfinish` hook in `conftest.py`) | The spec asks for one JSON file with all results. Collecting in memory and writing once is simpler than writing on every call: a single disk write, no risk of two tests writing at the same time, and no extra I/O while tests are running. | If `pytest` crashes before the end, the file is not written. Acceptable — a partial report is not necessarily more useful than no file. |
+  | Performance report aggregation | Collect reportable spec-threshold results in memory during the run, then write `reports/performance_report.json` once at the end (via a `pytest_sessionfinish` hook in `conftest.py`) | The spec asks for one JSON file with the performance results. Collecting in memory and writing once is simpler than writing on every call: a single disk write, no risk of two tests writing at the same time, and no extra I/O while tests are running. Internal tests that use artificial thresholds (`1 ms`, `60000 ms`) call a non-reporting helper so the final artifact contains only the real thresholds (`3000 / 2500 / 2000`). | If `pytest` crashes before the end, the file is not written. Acceptable — a partial report is not necessarily more useful than no file. |
   | Reporting toolchain | `pytest-html` for the run report + a `pytest_sessionfinish` hook for the perf JSON. | pytest-html is a one-line addition: a dep plus `--html=reports/report.html --self-contained-html` in `addopts`. Self-contained means a single HTML file that opens anywhere with no asset folder. The custom JSON aggregator is still needed because the spec asks for a specific format pytest-html does not produce. | Two artifacts instead of one. Both live under `reports/`. |
   | Artifacts under `reports/` | Both reports (`report.html`, `performance_report.json`) live under `reports/`; screenshots live under `screenshots/`. | One folder for CI/report upload, one folder for visual evidence. The directories are ignored for normal local churn, and the final submission artifacts are force-added to git. | A fresh run creates new timestamped screenshots, so old evidence may remain until manually cleaned. |
   | `pytest-asyncio` loop scope | Both `asyncio_default_fixture_loop_scope` and `asyncio_default_test_loop_scope` are set to `"session"` in `pyproject.toml` | Playwright objects (`Page`, `BrowserContext`) are bound to the event loop on which they were created. With the default mix (session loop for fixtures, function loop for tests), a page created in a session-scoped fixture and used inside a test hangs forever -- the awaitable is registered on the wrong loop's queue and never resolves, with no error. Forcing both scopes to `"session"` keeps the whole run on one loop. | All tests share one event loop, so test order can matter slightly more (a misused session-scoped fixture could leak state across tests). Mitigation: every test gets a fresh `BrowserContext`, so DOM and cookies do not leak. |
 
   ---
 
-  ## Open Decisions
+  ## Optional Future Improvements
 
-  These decisions are still open. They will be made when needed during the work. Listed here to be open about what is not yet decided:
+  These items are outside the assignment scope, but would be reasonable next steps for a longer-lived test suite:
 
-  | Area | Pending decision |
+  | Area | Possible improvement |
   |---|---|
-  | CI/CD | Optional extra. May add a GitHub Actions workflow. |
-  | Reading list cleanup mode | Planned: an opt-in CLI flag (e.g. `--clean-reading-list` or env var `CLEAN_READING_LIST=true`) that, when set, wipes every shelf (Currently Reading + Want to Read + Already Read) **before** the run starts and again **after** it ends. Default behaviour stays as today: no cleanup, tests rely on the idempotency of `add_to_shelf`. Rationale: the project's OL account is a throwaway used only for this exercise, so a full wipe is safe when requested, and it produces a fully deterministic starting state for data-driven and E2E runs. Implementation will be a `pytest_addoption` + a session-scoped fixture that iterates the three shelf pages and calls `remove_from_shelf` per book, gated on the flag. To be added after function 4 and the data-driven refactor are in place. |
+  | CI/CD | Add a GitHub Actions workflow that installs dependencies, runs Playwright setup, and executes the pytest suite against configured credentials. |
+  | Reading list cleanup mode | Add an opt-in CLI flag (e.g. `--clean-reading-list` or env var `CLEAN_READING_LIST=true`) that wipes every shelf before and after the run. Default behaviour should stay as today: no cleanup, tests rely on the idempotency of `add_to_shelf`. This would make repeated local runs more deterministic, but it is intentionally not enabled by default because it mutates account data. |
 
   ---
 
