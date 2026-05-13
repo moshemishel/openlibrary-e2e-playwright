@@ -9,8 +9,15 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 logger = logging.getLogger(__name__)
 
-YEAR_REGEX = re.compile(r"\b(1[0-9]{3}|20[0-9]{2})\b")
+FIRST_PUBLISHED_REGEX = re.compile(
+    r"\bFirst published in\s+(1[0-9]{3}|20[0-9]{2})\b",
+    re.IGNORECASE,
+)
 DEFAULT_BASE_URL = "https://openlibrary.org"
+
+
+class SearchResultsParseError(RuntimeError):
+    """Raised when OpenLibrary search results no longer match expected markup."""
 
 
 class SearchPage:
@@ -25,6 +32,8 @@ class SearchPage:
     RESULT_LINK = '[itemprop="name"] a[itemprop="url"]'
     RESULT_DETAILS_SPAN = ".resultDetails span"
     PAGINATION = "ol-pagination"
+    # OpenLibrary's verify-human script binds this button by id, so this is
+    # a stable app hook; role/name would be more sensitive to text/i18n changes.
     VERIFY_HUMAN_BUTTON = "#verify-human-btn"
 
     def __init__(self, page: Page, base_url: str) -> None:
@@ -68,16 +77,18 @@ class SearchPage:
             logger.warning("verify-human button still present after click")
 
     async def _extract_year(self, item: Locator) -> int | None:
-        """Pull a 4-digit year (1000-2099) out of the result's details text.
+        """Pull the first-publication year out of the result's details text.
 
         Returns None when no year is found. A result may legitimately have
         no year (a generic edition entry, for example).
         """
-        year_span = item.locator(self.RESULT_DETAILS_SPAN).filter(has_text=YEAR_REGEX).first
+        year_span = item.locator(self.RESULT_DETAILS_SPAN).filter(
+            has_text=FIRST_PUBLISHED_REGEX
+        ).first
         if await year_span.count() == 0:
             return None
         text = await year_span.inner_text()
-        match = YEAR_REGEX.search(text)
+        match = FIRST_PUBLISHED_REGEX.search(text)
         return int(match.group(1)) if match else None
 
     async def _extract_url(self, item: Locator) -> str | None:
@@ -125,10 +136,12 @@ class SearchPage:
                 logger.info("no results on page %d, stopping", page_num)
                 break
 
+            parsed_year_count = 0
             for item in items:
                 year = await self._extract_year(item)
                 if year is None:
                     continue
+                parsed_year_count += 1
                 if year > max_year:
                     logger.info(
                         "year %d > max_year %d, stopping early (sort=old)",
@@ -142,6 +155,14 @@ class SearchPage:
                 collected.append(book_url)
                 if len(collected) >= limit:
                     return collected
+
+            if parsed_year_count == 0:
+                raise SearchResultsParseError(
+                    f"Search page {page_num} for query={query!r} has {len(items)} "
+                    "book result(s), but none matched the expected "
+                    "'First published in <year>' details text. OpenLibrary may "
+                    "have changed the result wording or markup."
+                )
 
             page_num += 1
             if page_num > total_pages:
