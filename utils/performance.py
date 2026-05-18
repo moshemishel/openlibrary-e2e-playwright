@@ -59,7 +59,8 @@ async def _measure_page_performance(
 
     Returns a dict with:
         url, threshold_ms, timestamp (ISO 8601 UTC), breached (bool),
-        load_time_ms, dom_content_loaded_ms, first_paint_ms.
+        measurement_error (bool), load_time_ms, dom_content_loaded_ms,
+        first_paint_ms.
 
     For reportable measurements, a breach (any non-null metric >
     threshold_ms) is logged at WARNING level. The function still returns
@@ -73,7 +74,10 @@ async def _measure_page_performance(
     metrics: dict[str, int | None] = await page.evaluate(_METRIC_SCRIPT)
 
     measured = [m for m in metrics.values() if m is not None]
+    measurement_error = len(measured) == 0
     breached = any(m > threshold_ms for m in measured)
+    if measurement_error and record_result:
+        logger.warning("performance measurement returned no metrics: url=%s", url)
     if breached and record_result:
         logger.warning(
             "perf threshold breach: url=%s threshold=%dms metrics=%s",
@@ -87,6 +91,7 @@ async def _measure_page_performance(
         "threshold_ms": threshold_ms,
         "timestamp": datetime.now(UTC).isoformat(),
         "breached": breached,
+        "measurement_error": measurement_error,
         **metrics,
     }
     if record_result:

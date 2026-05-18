@@ -120,6 +120,8 @@ class SearchPage:
         collected: list[str] = []
         page_num = 1
         total_pages: int | None = None
+        saw_results = False
+        saw_parseable_year = False
 
         while len(collected) < limit:
             url = self._build_search_url(query, page_num)
@@ -135,6 +137,7 @@ class SearchPage:
             if not items:
                 logger.info("no results on page %d, stopping", page_num)
                 break
+            saw_results = True
 
             parsed_year_count = 0
             for item in items:
@@ -142,6 +145,7 @@ class SearchPage:
                 if year is None:
                     continue
                 parsed_year_count += 1
+                saw_parseable_year = True
                 if year > max_year:
                     logger.info(
                         "year %d > max_year %d, stopping early (sort=old)",
@@ -157,17 +161,25 @@ class SearchPage:
                     return collected
 
             if parsed_year_count == 0:
-                raise SearchResultsParseError(
-                    f"Search page {page_num} for query={query!r} has {len(items)} "
-                    "book result(s), but none matched the expected "
-                    "'First published in <year>' details text. OpenLibrary may "
-                    "have changed the result wording or markup."
+                logger.warning(
+                    "search page %d for query=%r has %d book result(s), but no "
+                    "publication years were parsed; continuing to next page",
+                    page_num,
+                    query,
+                    len(items),
                 )
 
             page_num += 1
             if page_num > total_pages:
                 logger.info("reached last page (%d), stopping", total_pages)
                 break
+
+        if saw_results and not saw_parseable_year:
+            raise SearchResultsParseError(
+                f"Search for query={query!r} returned book result(s), but none "
+                "matched the expected 'First published in <year>' details text. "
+                "OpenLibrary may have changed the result wording or markup."
+            )
 
         return collected
 

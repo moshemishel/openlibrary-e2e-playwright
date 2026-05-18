@@ -61,7 +61,7 @@ class ReadingListPage:
     async def goto(self) -> None:
         await self.page.goto(urljoin(self.base_url, self.LANDING_PATH))
 
-    async def _shelf_count(self, label: str) -> int:
+    async def _shelf_count(self, label: str) -> tuple[int, bool]:
         """Read the count for one shelf from its H2 heading.
 
         Heading text is "Label (N)" when the shelf has items, or just
@@ -78,14 +78,29 @@ class ReadingListPage:
         )
         if await heading.count() == 0:
             logger.warning("shelf heading %r not found, treating as 0", label)
-            return 0
+            return 0, False
         text = (await heading.first.inner_text()).strip()
         match = _COUNT_REGEX.search(text)
-        return int(match.group(1).replace(",", "")) if match else 0
+        count = int(match.group(1).replace(",", "")) if match else 0
+        return count, True
 
     async def get_shelf_counts(self) -> dict[str, int]:
         """Return a {shelf_key: count} dict for the three status shelves."""
-        counts = {key: await self._shelf_count(label) for key, label in SHELF_LABELS.items()}
+        counts: dict[str, int] = {}
+        found_labels: list[str] = []
+        for key, label in SHELF_LABELS.items():
+            count, found = await self._shelf_count(label)
+            counts[key] = count
+            if found:
+                found_labels.append(label)
+
+        if not found_labels:
+            expected = ", ".join(SHELF_LABELS.values())
+            raise AssertionError(
+                "Reading list page did not show any shelf headings. "
+                f"Current URL: {self.page.url}. Expected at least one of: {expected}."
+            )
+
         logger.info("shelf counts: %s", counts)
         return counts
 

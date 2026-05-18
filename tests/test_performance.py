@@ -41,6 +41,7 @@ def _assert_record_shape(record: dict[str, Any], url: str, threshold: int) -> No
     assert record["url"] == url
     assert record["threshold_ms"] == threshold
     assert isinstance(record["breached"], bool)
+    assert isinstance(record["measurement_error"], bool)
     assert isinstance(record["timestamp"], str)
     for key in REQUIRED_METRICS:
         assert key in record, f"missing metric key: {key}"
@@ -48,6 +49,7 @@ def _assert_record_shape(record: dict[str, Any], url: str, threshold: int) -> No
         # browser had no entry for it. We tolerate None to keep the
         # function honest about missing data.
         assert record[key] is None or isinstance(record[key], int)
+    assert record["measurement_error"] == all(record[key] is None for key in REQUIRED_METRICS)
 
 
 async def test_record_shape_anonymous(anonymous_page: Page, config: dict[str, Any]) -> None:

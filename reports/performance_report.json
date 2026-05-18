@@ -3,60 +3,67 @@
     {
       "url": "https://openlibrary.org/search?q=title%3A+%22Dune%22&mode=everything&sort=old&page=1",
       "threshold_ms": 3000,
-      "timestamp": "2026-05-13T09:28:31.080531+00:00",
+      "timestamp": "2026-05-18T10:10:47.263829+00:00",
       "breached": false,
-      "load_time_ms": 2856,
-      "dom_content_loaded_ms": 2670,
-      "first_paint_ms": 2648
+      "measurement_error": false,
+      "load_time_ms": 1479,
+      "dom_content_loaded_ms": 1450,
+      "first_paint_ms": 1244
     },
     {
       "url": "https://openlibrary.org/works/OL93082W/La_Divina_Commedia?edition=key%3A/books/OL52703231M",
       "threshold_ms": 2500,
-      "timestamp": "2026-05-13T09:28:32.923371+00:00",
+      "timestamp": "2026-05-18T10:10:48.723965+00:00",
       "breached": false,
-      "load_time_ms": 1837,
-      "dom_content_loaded_ms": 1642,
-      "first_paint_ms": 1632
+      "measurement_error": false,
+      "load_time_ms": 1455,
+      "dom_content_loaded_ms": 1239,
+      "first_paint_ms": 1240
     },
     {
       "url": "https://openlibrary.org/account/books",
       "threshold_ms": 2000,
-      "timestamp": "2026-05-13T09:28:34.760435+00:00",
+      "timestamp": "2026-05-18T10:10:50.411677+00:00",
       "breached": false,
-      "load_time_ms": 1830,
-      "dom_content_loaded_ms": 1613,
-      "first_paint_ms": 1604
+      "measurement_error": false,
+      "load_time_ms": 1681,
+      "dom_content_loaded_ms": 1427,
+      "first_paint_ms": 1432
     },
     {
       "url": "https://openlibrary.org/search?q=title%3A+%22python%22&mode=everything&sort=old&page=1",
       "threshold_ms": 3000,
-      "timestamp": "2026-05-13T09:29:00.805288+00:00",
+      "timestamp": "2026-05-18T10:11:13.189384+00:00",
       "breached": true,
-      "load_time_ms": 5534,
-      "dom_content_loaded_ms": 3850,
-      "first_paint_ms": 3368
+      "measurement_error": false,
+      "load_time_ms": 5094,
+      "dom_content_loaded_ms": 4673,
+      "first_paint_ms": 2944
     },
     {
       "url": "https://openlibrary.org/works/OL893415W/Dune",
       "threshold_ms": 2500,
-      "timestamp": "2026-05-13T09:29:09.878714+00:00",
+      "timestamp": "2026-05-18T10:11:16.467821+00:00",
       "breached": true,
-      "load_time_ms": 8962,
-      "dom_content_loaded_ms": 8256,
-      "first_paint_ms": 7704
+      "measurement_error": false,
+      "load_time_ms": 3191,
+      "dom_content_loaded_ms": 2740,
+      "first_paint_ms": 2080
     },
     {
       "url": "https://openlibrary.org/account/books",
       "threshold_ms": 2000,
-      "timestamp": "2026-05-13T09:29:13.770189+00:00",
+      "timestamp": "2026-05-18T10:11:20.443050+00:00",
       "breached": true,
-      "load_time_ms": 3783,
-      "dom_content_loaded_ms": 3125,
-      "first_paint_ms": 2532
+      "measurement_error": false,
+      "load_time_ms": 3895,
+      "dom_content_loaded_ms": 2886,
+      "first_paint_ms": 2376
     }
   ],
   "summary": {
     "total": 6,
-    "breached": 3
+    "breached": 3,
+    "measurement_errors": 0
   }
 }

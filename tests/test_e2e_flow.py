@@ -16,6 +16,7 @@ specific value. This is what lets the test pass on repeat runs
 without a cleanup step.
 """
 
+import logging
 import random
 from typing import Any
 
@@ -26,9 +27,14 @@ from pages.reading_list_page import ReadingListPage, assert_reading_list_count
 from pages.search_page import build_title_search_url, search_books_by_title_under_year
 from utils.performance import measure_page_performance
 
+logger = logging.getLogger(__name__)
 
-async def test_e2e_search_add_assert_measure(page: Page, config: dict[str, Any]) -> None:
+
+async def test_e2e_search_add_assert_measure(
+    page: Page, config: dict[str, Any], record_property: Any, caplog: Any
+) -> None:
     """Chain all four spec functions in a single test."""
+    caplog.set_level(logging.INFO, logger=__name__)
     base_url = config["base_url"]
     # Seeded so the random shelf choice in function 2 is reproducible.
     random.seed(42)
@@ -51,19 +57,54 @@ async def test_e2e_search_add_assert_measure(page: Page, config: dict[str, Any])
 
     # ----- Step 2: function 2 -- add to random shelves -----
     book = BookPage(page, base_url)
+    pre_add_shelves: list[tuple[str, str | None]] = []
+    for url in urls:
+        await book.goto(url)
+        pre_add_shelves.append((url, await book.current_shelf()))
+
+    already_on_shelf = sum(shelf is not None for _, shelf in pre_add_shelves)
+    logger.info(
+        "before add: %d out of %d selected book URL(s) were already on a reading shelf",
+        already_on_shelf,
+        len(urls),
+    )
+    record_property("selected_books_already_on_shelf_before_add", already_on_shelf)
+    record_property("selected_book_url_count", len(urls))
+
     await add_books_to_reading_list(page, urls, base_url=base_url)
 
     # Function 2 contract: each book ends on WTR or AR.
+    verified_after_add = 0
     for url in urls:
         await book.goto(url)
-        assert await book.current_shelf() in {"want_to_read", "already_read"}, (
+        current_shelf = await book.current_shelf()
+        assert current_shelf in {"want_to_read", "already_read"}, (
             f"book {url} not on WTR/AR after add"
         )
+        verified_after_add += 1
+
+    logger.info(
+        "after add: all %d selected book URL(s) verified on Want to Read or Already Read",
+        verified_after_add,
+    )
+    record_property("selected_books_verified_after_add", verified_after_add)
 
     # ----- Step 3: function 3 -- assert count -----
     await rlp.goto()
     after = await rlp.total_count()
     delta = after - before
+    logger.info(
+        "reading-list count delta after add: %d (before=%d after=%d selected=%d "
+        "already_on_shelf_before=%d)",
+        delta,
+        before,
+        after,
+        len(urls),
+        already_on_shelf,
+    )
+    record_property("reading_list_count_before_add", before)
+    record_property("reading_list_count_after_add", after)
+    record_property("reading_list_count_delta_after_add", delta)
     assert 0 <= delta <= len(urls), (
         f"reading-list delta out of range: "
         f"before={before} after={after} delta={delta} len(urls)={len(urls)}"

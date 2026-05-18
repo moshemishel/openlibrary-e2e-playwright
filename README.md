@@ -273,6 +273,8 @@
 
   OpenLibrary's search results do **not** expose `datePublished` anywhere in the DOM — no `<meta>`, no `data-*` attribute, no JSON-LD. The year appears only as text: `"First published in 1965"`. We extract it from `.resultDetails span` and parse the 4-digit year with a regex.
 
+  If one result page has book items but no parseable publication years, the search logs a warning and continues to the next page. It raises `SearchResultsParseError` only when OpenLibrary returned book results for the search but none of the scanned pages exposed a parseable `"First published in <year>"` value. This keeps pagination tolerant of one odd page while still failing clearly if the search markup changed.
+
   **Alternative considered:** OpenLibrary's JSON API at `https://openlibrary.org/search.json?q=...` returns `first_publish_year` as an integer — fully stable. Rejected because it bypasses the UI/POM architecture, which is 40% of the grade. Kept on record for future reference.
 
   ### Function 2 — `add_books_to_reading_list` (BookPage)
@@ -347,9 +349,11 @@
 
   Counting `.book.carousel__item` elements on the landing page is tempting but wrong. The carousel is JS-paginated and only renders the first 6 or so items, even when the shelf has 13. The number in the heading is server-rendered from the database and is the true total. Using it costs one page load, not three (one per shelf), and never under-counts.
 
-  **Why a missing heading maps to `0` instead of an error:**
+  **Why a missing heading maps to `0` instead of an error for one shelf:**
 
-  Defensive default. If OpenLibrary ever stops rendering a shelf section that has zero items, our code logs a warning and returns `0` for that shelf, instead of raising. The total stays correct, and the warning gives us a signal to update the locator if the page layout changes.
+  Defensive default. If OpenLibrary ever stops rendering one shelf section that has zero items, our code logs a warning and returns `0` for that shelf, instead of raising. The total stays correct, and the warning gives us a signal to update the locator if the page layout changes.
+
+  If **none** of the three shelf headings is found, the page is probably not the reading-list landing page at all (for example, a redirect to login or a layout change). In that case the function raises with the current URL instead of reporting a false `0`.
 
   ---
   
@@ -372,7 +376,7 @@
 
   **Auth.** One login per session. Playwright's `storage_state()` is captured in memory (`auth_storage_state` fixture) and injected into a fresh `BrowserContext` for every test that needs login. Tests stay isolated but already signed in.
 
-  **Reporting.** Two artifacts under `reports/`: `report.html` from pytest-html, and `performance_report.json` written once at session end. The performance JSON contains only reportable spec-threshold measurements; internal threshold edge-case tests are excluded from the final artifact. The folders are gitignored for normal local churn, but final submission artifacts are force-added.
+  **Reporting.** Two artifacts under `reports/`: `report.html` from pytest-html, and `performance_report.json` written once at session end. The performance JSON contains only reportable spec-threshold measurements; internal threshold edge-case tests are excluded from the final artifact. Each performance record includes `measurement_error`; it is `true` only when the browser returned none of the three timing metrics, so the report does not confuse "not measured" with "under threshold". The folders are gitignored for normal local churn, but final submission artifacts are force-added.
 
   ---
                                                                                                                                                                                                
@@ -380,7 +384,7 @@
 
   - **Config merge depth.** Profile merging is shallow (`{**default, **active}`). A profile that wants to override a single key inside `thresholds` must restate all three keys. No profile in this project needs that, so the loader stays simple. A deeper merge would be one `if isinstance(v, dict)` in the loader if a future profile ever needs it.
 
-  - **No reading-list cleanup.** Function 2 adds books; the account count only goes up over runs. The idempotent `add_to_shelf` prevents duplicates, and the data-driven + E2E tests use delta-based assertions (`0 <= delta <= len(urls)`), so the suite passes either way. An optional cleanup mode is listed under **Optional Future Improvements** below.
+  - **No reading-list cleanup.** Function 2 adds books; the account count only goes up over runs. The idempotent `add_to_shelf` prevents duplicates, and the data-driven + E2E tests use delta-based assertions (`0 <= delta <= len(urls)`), so the suite passes either way. The E2E flow logs how many selected book URLs were already on a reading shelf before the add step, verifies that all selected URLs end on Want to Read or Already Read after the add step, and records the final count delta. An optional cleanup mode is listed under **Optional Future Improvements** below.
 
   - **Single browser (Chromium).** The framework launches `playwright_instance.chromium.launch(...)` only. Firefox and WebKit are reachable via Playwright but not parameterised here. A cross-browser sweep would multiply runtime, so it is left out of this iteration.
 

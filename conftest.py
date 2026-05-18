@@ -134,6 +134,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
         "summary": {
             "total": len(results),
             "breached": sum(1 for r in results if r["breached"]),
+            "measurement_errors": sum(1 for r in results if r.get("measurement_error")),
         },
     }
     reports_dir = Path(__file__).parent / "reports"
